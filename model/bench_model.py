@@ -1,0 +1,378 @@
+"""
+Main BENCH Model simulation engine
+Orchestrates the entire simulation workflow
+"""
+
+import os
+import re
+import random
+import datetime
+from typing import Dict, List, Optional
+from agents.household import Household
+from data_loader.loader import DataLoader
+from behavioral.utility import UtilityCalculator
+from behavioral.decision_making import DecisionMaker
+from behavioral.learning import LearningMechanism
+from utils.statistics import StatisticsAggregator
+from utils.output import ResultsExporter
+from utils.constants import (
+    MODEL_START_YEAR, MODEL_END_YEAR,
+    INCOME_GROUPS, DWELLING_LABELS,
+    FLAG_NAMES, OUTPUT_DIR
+)
+
+
+class BENCHModel:
+    """
+    Main BENCH Model implementation in pure Python.
+    
+    Manages:
+    - Agent creation and lifecycle
+    - Annual simulation loop (2015-2030)
+    - Behavioral decision-making
+    - Market dynamics
+    - Results tracking and export
+    """
+    
+    def __init__(self, case_study: str, scenario: str, policy: str,
+                 base_path: str = "."):
+        """
+        Initialize BENCH model.
+        
+        Args:
+            case_study: "Netherlands-Overijssel" or "Spain-Navarre"
+            scenario: "Ref_SSP2"
+            policy: Price scenario policy
+            base_path: Path to project root
+        """
+        self.case_study = case_study
+        self.scenario = scenario
+        self.policy = policy
+        self.base_path = base_path
+        self.run_id = self._generate_run_id()
+        self.run_output_dir = os.path.join(self.base_path, OUTPUT_DIR, self.run_id)
+        self.run_config = {
+            'case_study': self.case_study,
+            'scenario': self.scenario,
+            'policy': self.policy,
+            'run_id': self.run_id,
+            'start_year': MODEL_START_YEAR,
+            'end_year': MODEL_END_YEAR,
+            'output_dir': self.run_output_dir,
+        }
+        
+        # Simulation state
+        self.year = MODEL_START_YEAR
+        self.households = []
+        self.n_households = 0
+        
+        # Market state
+        self.prices = {
+            'm_p_ff': 0.15,
+            'm_p_lce': 0.17,
+            'm_p_zero': 0.12,
+        }
+        
+        # Components
+        self.data_loader = DataLoader(base_path)
+        self.utility_calculator = UtilityCalculator()
+        self.decision_maker = DecisionMaker()
+        self.learning_mechanism = LearningMechanism()
+        self.statistics = StatisticsAggregator()
+        self.exporter = ResultsExporter(output_dir=self.run_output_dir)
+        
+        # Configuration
+        self.debug = False
+        self.memory_recall = True
+    
+    def initialize(self) -> bool:
+        """
+        Initialize model: load data and create agents.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        print(f"\n{'='*60}")
+        print("BENCH MODEL INITIALIZATION")
+        print(f"{'='*60}")
+        print(f"Case Study: {self.case_study}")
+        print(f"Scenario: {self.scenario}")
+        print(f"Policy: {self.policy}")
+        print(f"{'='*60}\n")
+        
+        # Load all data
+        if not self.data_loader.load_all_data():
+            return False
+        
+        # Create household agents
+        if not self._create_agents():
+            return False
+        
+        # Print summary
+        self.data_loader.print_summary()
+        self._print_agent_summary()
+        
+        return True
+    
+    def _sanitize_string(self, value: str) -> str:
+        safe = re.sub(r'[^A-Za-z0-9_-]+', '_', value.strip().replace(' ', '_'))
+        return safe.strip('_')[:80]
+    
+    def _generate_run_id(self) -> str:
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        case_slug = self._sanitize_string(self.case_study)
+        scenario_slug = self._sanitize_string(self.scenario)
+        policy_slug = self._sanitize_string(self.policy)
+        return f"{timestamp}_{case_slug}_{scenario_slug}_{policy_slug}"
+
+    def _create_agents(self) -> bool:
+        """
+        Create household agents from loaded data.
+        
+        Returns:
+            True if successful
+        """
+        try:
+            household_data = self.data_loader.get_all_households_data()
+
+            for _, row in household_data.iterrows():
+                # Extract attributes from data
+                h_id = int(row.get('id', len(self.households)))
+                income_group = int(row.get('group id', 1))
+                income = float(row.get('income', 20000))
+                consumption = float(row.get('consumption', 3000))
+                
+                # Energy flag: interpret from data
+                energy_flag = int(row.get('lce user?', 0))
+                if energy_flag > 1:
+                    energy_flag = 2
+                
+                dwelling_label = int(row.get('dw_el', 3)) if 'dw_el' in row else 3
+                owner = bool(row.get('Owner', True))
+                
+                # Convert row to dictionary and pull out what you already handled explicitly, DONT WANT TO PASS THE STUFF THAT IS ALERADY EXTRACTED AS ARGUMENTS TO THE HOUSEHOLD CONSTRUCTOR
+                row_dict = row.to_dict()
+                for key in ['id', 'group id', 'income', 'consumption', 'lce user?', 'dw_el', 'Owner']:
+                    row_dict.pop(key, None)
+                    
+                # Create household
+                household = Household(
+                    h_id=h_id,
+                    income_group=income_group,
+                    income=income,
+                    consumption_q=consumption,
+                    energy_flag=energy_flag,
+                    dwelling_label=dwelling_label,
+                    owner=owner,
+                    **row_dict
+                )
+                
+                # Set initial behavioral attributes if available
+                if 'knowledge' in row or 'know' in row:
+                    household.know = float(row.get('knowledge', row.get('know', 0)))
+                if 'cee_aw' in row:
+                    household.cee_aw = float(row.get('cee_aw', 0))
+                if 'ed_aw' in row:
+                    household.ed_aw = float(row.get('ed_aw', 0))
+                
+                # Set norms if available
+                if 'personal1' in row:
+                    household.per_nab[0] = float(row.get('personal1', 0))
+                    household.per_nab[1] = float(row.get('personal2', 0)) if 'personal2' in row else 0
+                    household.per_nab[2] = float(row.get('personal3', 0)) if 'personal3' in row else 0
+                
+                if 'social1' in row:
+                    household.su_nor[0] = float(row.get('social1', 0))
+                    household.su_nor[1] = float(row.get('social2', 0)) if 'social2' in row else 0
+                    household.su_nor[2] = float(row.get('social3', 0)) if 'social3' in row else 0
+                
+                if 'pbc1' in row:
+                    household.pbc[0] = float(row.get('pbc1', 0))
+                    household.pbc[1] = float(row.get('pbc2', 0)) if 'pbc2' in row else 0
+                    household.pbc[2] = float(row.get('pbc3', 0)) if 'pbc3' in row else 0
+                
+                # Initial awareness calculation
+                household.update_awareness()
+                household.update_motivation(self.case_study)
+                
+                self.households.append(household)
+            
+            self.n_households = len(self.households)
+            print(f"✓ Created {self.n_households} household agents")
+            return True
+            
+        except Exception as e:
+            print(f"✗ Error creating agents: {e}")
+            return False
+    
+    def _print_agent_summary(self) -> None:
+        """Print summary of created agents."""
+        if self.n_households == 0:
+            return
+        
+        ff_count = sum(1 for hh in self.households if hh.flag == 0)
+        lce_count = sum(1 for hh in self.households if hh.flag == 1)
+        slce_count = sum(1 for hh in self.households if hh.flag == 2)
+        
+        avg_income = sum(hh.h_income for hh in self.households) / self.n_households
+        avg_consumption = sum(hh.h_q for hh in self.households) / self.n_households
+        avg_awareness = sum(hh.h_aware for hh in self.households) / self.n_households
+        
+        print(f"\nAgent Summary (Baseline 2015):")
+        print(f"  Total Households: {self.n_households}")
+        print(f"  Energy Source Distribution:")
+        print(f"    - Fossil Fuel (FF): {ff_count} ({ff_count/self.n_households*100:.1f}%)")
+        print(f"    - Green (LCE): {lce_count} ({lce_count/self.n_households*100:.1f}%)")
+        print(f"    - Super-Green (SLCE): {slce_count} ({slce_count/self.n_households*100:.1f}%)")
+        print(f"  Average Income: €{avg_income:,.0f}")
+        print(f"  Average Consumption: {avg_consumption:,.0f} kWh/year")
+        print(f"  Average Awareness: {avg_awareness:.2f}")
+    
+    def step(self) -> bool:
+        """
+        Execute one year of simulation.
+        
+        Returns:
+            True if year completed successfully
+        """
+        if self.year > MODEL_END_YEAR:
+            return False
+        
+        if self.debug:
+            print(f"\n--- Year {self.year} ---")
+        
+        # Recall historical behavior (2015 only)
+        if self.year == MODEL_START_YEAR and self.memory_recall:
+            self._recall_memory()
+        
+        # Update prices based on policy
+        self._update_prices()
+        
+        # For each household: behavioral decision process
+        for household in self.households:
+            # 1. Activate knowledge pathway
+            self.decision_maker.activate_knowledge(household, self.case_study)
+            
+            # 2. Update motivation
+            self.decision_maker.update_motivation(household, self.case_study)
+            
+            # 3. Consider constraints
+            for action_type in range(3):
+                self.decision_maker.consider_action(household, action_type)
+            
+            # 4. Calculate budget constraints
+            household.calculate_budgets(self.prices)
+            
+            # 5. Normalize budgets across population
+            self.utility_calculator.normalize_budget_values(household)
+            
+            # 6. Calculate utilities
+            self.utility_calculator.calculate_all_utilities(household, {})
+            
+            # 7. Make decisions
+            self.decision_maker.decide_action(household, {}, self.utility_calculator)
+            
+            # 8. Calculate outcomes
+            self.decision_maker.calculate_energy_savings(household, self.prices)
+            self.decision_maker.calculate_financial_outcomes(household, self.prices)
+            self.decision_maker.calculate_emissions_avoided(household, self.prices)
+            
+            # 9. Update actual utility
+            self.utility_calculator.calculate_actual_utility(household)
+            
+            # 10. Learning
+            self.learning_mechanism.update_memory(household, self.year)
+        
+        # 11. Social learning (simplified - each HH learns from random sample)
+        self._apply_social_learning()
+        
+        # 12. Aggregate statistics
+        stats = self.statistics.aggregate_population_stats(self.households, self.year)
+        self.statistics.store_annual_stats(self.year, stats)
+        
+        if self.debug:
+            print(f"  LCE Share: {stats['lce_share_percent']:.1f}%")
+            print(f"  Actions Taken: {stats['action_total_count']}")
+        
+        # Increment time
+        self.year += 1
+        
+        return True
+    
+    def _recall_memory(self) -> None:
+        """Apply 2015 memory recall for historical behavior."""
+        for household in self.households:
+            self.learning_mechanism.recall_memory(
+                household, {}, household.h_income_group,
+                household.flag, self.case_study
+            )
+    
+    def _update_prices(self) -> None:
+        """Update electricity prices based on policy scenario."""
+        # Get price column index for policy
+        col_ff = self.data_loader.get_price_scenario_index(self.policy)
+        col_lce = col_ff + 1 if col_ff > 0 else 0
+        
+        # Get price from table for current year
+        price_ff = self.data_loader.get_price_at_year(self.policy, self.year, col_ff)
+        price_lce = self.data_loader.get_price_at_year(self.policy, self.year, col_lce)
+        
+        self.prices['m_p_ff'] = price_ff if price_ff > 0 else self.prices['m_p_ff']
+        self.prices['m_p_lce'] = price_lce if price_lce > 0 else self.prices['m_p_lce']
+        self.prices['m_p_zero'] = price_lce * 0.85  # Zero-carbon slightly cheaper
+    
+    def _apply_social_learning(self) -> None:
+        """Apply social learning to all households."""
+        for household in self.households:
+            # Get random sample of other households as neighbors
+            neighbors = random.sample(
+                [h for h in self.households if h.h_id != household.h_id],
+                min(10, self.n_households - 1)  # 10 neighbors max
+            )
+            
+            self.learning_mechanism.learn_from_peers(household, neighbors, self.year)
+            self.learning_mechanism.update_satisfaction(household, self.year)
+            self.learning_mechanism.update_regret(household, {}, self.year)
+    
+    def run(self, verbose: bool = True) -> bool:
+        """
+        Run complete simulation from 2015 to 2030.
+        
+        Args:
+            verbose: Print progress messages
+            
+        Returns:
+            True if successful
+        """
+        if not self.initialize():
+            print("✗ Model initialization failed")
+            return False
+        
+        print(f"{'='*60}")
+        print("SIMULATION RUNNING")
+        print(f"{'='*60}\n")
+        
+        while self.year <= MODEL_END_YEAR:
+            if not self.step():
+                break
+            
+            if verbose and self.year % 5 == 0:
+                print(f"✓ Year {self.year} completed")
+        
+        print(f"\n{'='*60}")
+        print("SIMULATION COMPLETE")
+        print(f"{'='*60}\n")
+        
+        return True
+    
+    def export_results(self) -> List[str]:
+        """Export all simulation results, including run configuration."""
+        files = self.exporter.export_all_results(
+            self, MODEL_START_YEAR, MODEL_END_YEAR
+        )
+        files.extend(self.exporter.export_run_config(self.run_config))
+        return files
+    
+    def get_summary(self) -> Dict:
+        """Get summary of simulation results."""
+        return self.statistics.get_cumulative_stats(MODEL_START_YEAR, MODEL_END_YEAR)

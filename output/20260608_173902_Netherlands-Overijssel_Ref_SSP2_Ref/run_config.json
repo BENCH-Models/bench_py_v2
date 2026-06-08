@@ -1,0 +1,9 @@
+{
+  "case_study": "Netherlands-Overijssel",
+  "scenario": "Ref_SSP2",
+  "policy": "Ref",
+  "run_id": "20260608_173902_Netherlands-Overijssel_Ref_SSP2_Ref",
+  "start_year": 2015,
+  "end_year": 2030,
+  "output_dir": "C:\\Users\\torrenperaire\\Documents\\Code\\BENCH_py_v.2\\output\\20260608_173902_Netherlands-Overijssel_Ref_SSP2_Ref"
+}

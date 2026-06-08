@@ -1,0 +1,27 @@
+============================================================
+BENCH MODEL SIMULATION RESULTS
+============================================================
+
+SIMULATION CONFIGURATION
+------------------------------------------------------------
+Case Study: Netherlands-Overijssel
+Scenario: Ref_SSP2
+Policy: Ref
+Time Period: 2015-2030
+Duration: 16 years
+
+CUMULATIVE RESULTS
+------------------------------------------------------------
+Total Investments: €6,826,260.00
+Total Energy Saved: 232,958,160 kWh
+Total Emissions Avoided: 549,156,783 kg CO2
+Total Conservation Savings: €5,676,719.08
+Total Actions Taken: 55,488
+
+FINAL YEAR METRICS (Year 2030)
+------------------------------------------------------------
+Renewable Energy Share: 47.3%
+High Awareness Households: 28.2%
+Average Awareness: 4.76
+
+============================================================
