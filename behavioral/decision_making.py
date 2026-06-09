@@ -243,6 +243,7 @@ class DecisionMaker:
             
             # Calculate money saved
             price = prices.get('m_p_grey', 0.15) if household.flag == 0 else prices.get('m_p_brown', 0.15)
+
             household.h_conserv_p = conservation_amount * price
         
         return energy_saved
@@ -313,14 +314,3 @@ class DecisionMaker:
             household.em_avoided[2] += household.h_q * co2_factor
         
         return emissions_avoided
-    
-    def get_decision_summary(self, household) -> Dict:
-        """Get summary of household's current decisions."""
-        return {
-            'h_id': household.h_id,
-            'action_investment': household.act1,
-            'action_conservation': household.act2,
-            'action_switching': household.act3,
-            'energy_source': household.flag,
-            'actions_taken': sum(household.hh_actions),
-        }

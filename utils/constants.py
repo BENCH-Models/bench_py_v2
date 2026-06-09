@@ -117,7 +117,6 @@ OUTPUT_ACTIONS_FILE = "actions_breakdown.csv"
 # Normalization Parameters (utilities)
 UTILITY_NORMALIZATION_FACTOR = 0.5  # Alpha parameter for utility calculation
 
-
 MEMORY_RULES = {
     1: {  # Income group 1
         1: {  # energy_flag = 1

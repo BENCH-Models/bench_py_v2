@@ -124,10 +124,6 @@ class BENCHModel:
         if not self._create_agents():
             return False
         
-        # Print summary
-        #self.data_loader.print_summary()
-        #self._print_agent_summary()
-        
         return True
     
     def _sanitize_string(self, value: str) -> str:

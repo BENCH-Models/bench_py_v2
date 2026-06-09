@@ -20,30 +20,6 @@ class UtilityCalculator:
         self.z_max = {}  # Store maximum z values for normalization
         self.e_norm = {}  # Store normalized energy parameters
     
-    def normalize_budgets(self, households: List) -> None:
-        """
-        Calculate maximum budget values across population for normalization.
-        
-        Args:
-            households: List of Household objects
-        """
-        # Find maximum z values across all households and scenarios
-        z_brown_max = [0.0, 0.0, 0.0]
-        z_grey_max = [0.0, 0.0, 0.0]
-        z_green_max = [0.0, 0.0, 0.0]
-        
-        for hh in households:
-            for i in range(3):
-                z_brown_max[i] = max(z_brown_max[i], hh.z_brown[i])
-                z_grey_max[i] = max(z_grey_max[i], hh.z_grey[i])
-                z_green_max[i] = max(z_green_max[i], hh.z_green[i])
-        
-        self.z_max = {
-            'z_brown': z_brown_max,
-            'z_grey': z_grey_max,
-            'z_green': z_green_max
-        }
-    
     def normalize_budget_values(self, household) -> None:
         """
         Normalize budget values (z) to 0-1 scale using population max.
@@ -51,15 +27,14 @@ class UtilityCalculator:
         Args:
             household: Household object to normalize
         """
-        z_brown_max = self.z_max.get('z_brown', [1.0, 1.0, 1.0])
-        z_grey_max = self.z_max.get('z_grey', [1.0, 1.0, 1.0])
-        z_green_max = self.z_max.get('z_green', [1.0, 1.0, 1.0])
+        z_brown_max = self.z_max.get('z_brown')
+        z_grey_max = self.z_max.get('z_grey')
+        z_green_max = self.z_max.get('z_green')
         
         for i in range(3):
-            # Normalize with protection against division by zero
-            household.z_brown_norm[i] = (household.z_brown[i] / z_brown_max[i]) if z_brown_max[i] > 0 else 0.0
-            household.z_grey_norm[i] = (household.z_grey[i] / z_grey_max[i]) if z_grey_max[i] > 0 else 0.0
-            household.z_green_norm[i] = (household.z_green[i] / z_green_max[i]) if z_green_max[i] > 0 else 0.0
+            household.z_brown_norm[i] = (household.z_brown[i] / z_brown_max[i])
+            household.z_grey_norm[i] = (household.z_grey[i] / z_grey_max[i])
+            household.z_green_norm[i] = (household.z_green[i] / z_green_max[i]) 
     
     def calculate_expected_utility(self, household, energy_source: int, 
                                   action_type: int, market_state: Dict) -> float:
@@ -89,14 +64,14 @@ class UtilityCalculator:
             Expected utility value (0-1 scale, typically)
         """
         # Select appropriate z value
-        if energy_source == 0:  # FF
+        if energy_source == 0:  # GREY
             z_norm = household.z_grey_norm[action_type]
-        elif energy_source == 1:  # LCE
+        elif energy_source == 1:  # BROWN
             z_norm = household.z_brown_norm[action_type]
-        else:  # SLCE
+        else:  # GREEN
             z_norm = household.z_green_norm[action_type]
         
-        # Environmental preference (proxy: higher for LCE/SLCE)
+        # Environmental preference (proxy: higher for BROWN/GREEN)
         e_norm = 0.3 if energy_source == 0 else 0.7
         
         # Get behavioral factors
@@ -157,80 +132,3 @@ class UtilityCalculator:
             household.utility_green = household.utility_exp_green.copy()
             household.utility_brown = [0.0, 0.0, 0.0]
             household.utility_grey = [0.0, 0.0, 0.0]
-    
-    def get_max_expected_utility(self, household) -> Tuple[float, int]:
-        """
-        Determine which action has highest expected utility.
-        
-        Args:
-            household: Household object
-            
-        Returns:
-            Tuple of (max_utility, action_type_index)
-        """
-        if household.flag == 0:  # FF
-            utils = household.utility_exp_grey
-        elif household.flag == 1:  # LCE
-            utils = household.utility_exp_brown
-        else:  # SLCE
-            utils = household.utility_exp_green
-        
-        max_util = max(utils) if utils else 0.0
-        max_action = utils.index(max_util) if utils else 0
-        
-        return max_util, max_action
-    
-    def should_take_action(self, household, action_type: int, 
-                          threshold: float = 0.5) -> bool:
-        """
-        Determine if household should take action based on utility threshold.
-        
-        Args:
-            household: Household object
-            action_type: 0, 1, or 2
-            threshold: Utility threshold (default 0.5)
-            
-        Returns:
-            True if utility > threshold, False otherwise
-        """
-        if household.flag == 0:
-            util = household.utility_exp_grey[action_type]
-        elif household.flag == 1:
-            util = household.utility_exp_brown[action_type]
-        else:
-            util = household.utility_exp_green[action_type]
-        
-        return util > threshold
-    
-    def calculate_switching_benefit(self, household, 
-                                   old_price: float, new_price: float) -> float:
-        """
-        Calculate benefit of switching energy sources.
-        
-        Args:
-            household: Household object
-            old_price: Current energy price (€/kWh)
-            new_price: New energy source price (€/kWh)
-            
-        Returns:
-            Annual savings/cost (negative = cost)
-        """
-        benefit = (old_price - new_price) * household.h_q
-        return benefit
-    
-    def calculate_action_utility_comparison(self, household) -> Dict[int, float]:
-        """
-        Compare utilities across all actions for current energy source.
-        
-        Args:
-            household: Household object
-            
-        Returns:
-            Dictionary mapping action_type -> utility
-        """
-        if household.flag == 0:
-            return {i: household.utility_exp_grey[i] for i in range(3)}
-        elif household.flag == 1:
-            return {i: household.utility_exp_brown[i] for i in range(3)}
-        else:
-            return {i: household.utility_exp_green[i] for i in range(3)}

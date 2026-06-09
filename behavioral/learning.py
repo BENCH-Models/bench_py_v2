@@ -11,7 +11,6 @@ from utils.constants import (
     MEMORY_RULES
 )
 
-
 class LearningMechanism:
     """
     Implements learning and social influence for households.
@@ -92,8 +91,6 @@ class LearningMechanism:
                 BEHAVIORAL_SCALE_MAX
             )
 
-        self._record_learning(source_household, year, source_household.know, source_household.h_aware)
-
 
     def recall_memory(self, household, initial_actions: Dict, 
                      income_group: int, energy_flag: int,
@@ -172,16 +169,4 @@ class LearningMechanism:
             'investment': household.h_invest,
             'savings': household.h_conserv,
         })
-    
-    def _record_learning(self, household, year: int, 
-                        peer_knowledge: float, peer_awareness: float) -> None:
-        """Record learning event for analysis."""
-        if year not in self.learning_history:
-            self.learning_history[year] = []
-        
-        self.learning_history[year].append({
-            'h_id': household.h_id,
-            'knowledge_before': household.know - 0.1,  # Approximate
-            'peer_knowledge': peer_knowledge,
-            'awareness_change': peer_awareness - household.h_aware,
-        })
+
