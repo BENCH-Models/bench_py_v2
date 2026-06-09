@@ -72,7 +72,7 @@ class ResultsExporter:
         
         df = pd.DataFrame(rows)
         df.to_csv(output_path, index=False)
-        print(f"✓ Exported annual aggregates: {output_path}")
+        #print(f"✓ Exported annual aggregates: {output_path}")
         
         return output_path
     
@@ -120,7 +120,7 @@ class ResultsExporter:
         
         df = pd.DataFrame(rows)
         df.to_csv(output_path, index=False)
-        print(f"✓ Exported household actions: {output_path}")
+        #print(f"✓ Exported household actions: {output_path}")
         
         return output_path
     
@@ -210,7 +210,7 @@ class ResultsExporter:
             
             f.write("=" * 60 + "\n")
         
-        print(f"✓ Exported summary report: {output_path}")
+        #print(f"✓ Exported summary report: {output_path}")
         return output_path
     
     def export_run_config(self, config: Dict,
@@ -221,14 +221,14 @@ class ResultsExporter:
 
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
-        print(f"✓ Exported run configuration: {output_path}")
+        #print(f"✓ Exported run configuration: {output_path}")
         output_paths.append(output_path)
 
         if yaml is not None:
             yaml_path = os.path.join(self.output_dir, 'run_config.yaml')
             with open(yaml_path, 'w', encoding='utf-8') as f:
                 yaml.safe_dump(config, f, sort_keys=False)
-            print(f"✓ Exported run configuration: {yaml_path}")
+            #print(f"✓ Exported run configuration: {yaml_path}")
             output_paths.append(yaml_path)
 
         return output_paths
@@ -262,7 +262,7 @@ class ResultsExporter:
             for year, value in trajectory:
                 writer.writerow([year, value])
         
-        print(f"✓ Exported trajectory: {output_path}")
+        #print(f"✓ Exported trajectory: {output_path}")
         return output_path
     
     def export_all_results(self, model, start_year: int, end_year: int) -> List[str]:

@@ -76,6 +76,15 @@ POLICIES = [
     "Carbon price pressure-2020"
 ]
 
+LEARNING_TYPES = [
+    "No learning",
+    "Fast adaptation",
+    "Slow adaptation",
+    "Observation",
+    "Promote switching"
+]
+DEFAULT_LEARNING_TYPE = "No learning"
+
 # File Paths (relative to project root)
 DATA_DIR = "netlogo/data"
 HOUSEHOLD_FILE = "netlogo/data/household.csv"

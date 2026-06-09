@@ -104,13 +104,6 @@ def plot_for_run(run_folder: str):
                 f'Trajectory: {variable}', f'trajectory_{variable}.png', plots_dir
             ))
 
-    if not saved_plots:
-        print("No plots were generated because supported variables were not found.")
-    else:
-        print("Saved plots:")
-        for saved in saved_plots:
-            print(f"  - {saved}")
-
     return saved_plots
 
 
@@ -134,9 +127,7 @@ def main():
 
     run_folder = find_run_folder(args.output_root, args.run)
     plot_for_run(run_folder)
-
+    plt.show()
 
 if __name__ == '__main__':
     main()
-
-    plt.show()

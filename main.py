@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from model.bench_model import BENCHModel
 from utils.constants import MODEL_START_YEAR, MODEL_END_YEAR
-
+from plotting_outputs import main as plot_outputs_main
 
 def main():
     """Main entry point for BENCH model simulation."""
@@ -23,13 +23,15 @@ def main():
     # Configuration
     CASE_STUDY = "Netherlands-Overijssel"  # or "Spain-Navarre"
     SCENARIO = "Ref_SSP2"
-    POLICY = "Ref"  # or "Carbon price pressure-25", etc.
+    POLICY = "Carbon price pressure-100"  # "Ref","Carbon price pressure-10","Carbon price pressure-25", "Carbon price pressure-50", "Carbon price pressure-100", "Carbon price pressure-2020"
+    LEARNING_TYPE = "Fast adaptation"  # or "Slow adaptation", "Observation", "Promote switching", "No learning"
     
     # Create and run model
     model = BENCHModel(
         case_study=CASE_STUDY,
         scenario=SCENARIO,
         policy=POLICY,
+        learning_type=LEARNING_TYPE,
         base_path=str(project_root)
     )
     
@@ -55,10 +57,12 @@ def main():
     # Export results
     print("\nExporting results...")
     files = model.export_results()
-    print(f"\nResults exported to: {model.run_output_dir}")
+    #print(f"\nResults exported to: {model.run_output_dir}")
     #print(f"Plots saved to: {model.exporter.plots_dir}")
-    print(f"Files: {len(files)}")
+    #print(f"Files: {len(files)}")
     
+
+    plot_outputs_main()  # Call the plotting function to generate plots from the results
     return 0
 
 

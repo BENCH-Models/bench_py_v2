@@ -18,7 +18,8 @@ from utils.output import ResultsExporter
 from utils.constants import (
     MODEL_START_YEAR, MODEL_END_YEAR,
     INCOME_GROUPS, DWELLING_LABELS,
-    FLAG_NAMES, OUTPUT_DIR
+    FLAG_NAMES, OUTPUT_DIR,
+    DEFAULT_LEARNING_TYPE
 )
 
 
@@ -35,6 +36,7 @@ class BENCHModel:
     """
     
     def __init__(self, case_study: str, scenario: str, policy: str,
+                 learning_type: str = DEFAULT_LEARNING_TYPE,
                  base_path: str = "."):
         """
         Initialize BENCH model.
@@ -43,11 +45,13 @@ class BENCHModel:
             case_study: "Netherlands-Overijssel" or "Spain-Navarre"
             scenario: "Ref_SSP2"
             policy: Price scenario policy
+            learning_type: One of the supported learning modes
             base_path: Path to project root
         """
         self.case_study = case_study
         self.scenario = scenario
         self.policy = policy
+        self.learning_type = learning_type
         self.base_path = base_path
         self.run_id = self._generate_run_id()
         self.run_output_dir = os.path.join(self.base_path, OUTPUT_DIR, self.run_id)
@@ -55,6 +59,7 @@ class BENCHModel:
             'case_study': self.case_study,
             'scenario': self.scenario,
             'policy': self.policy,
+            'learning_type': self.learning_type,
             'run_id': self.run_id,
             'start_year': MODEL_START_YEAR,
             'end_year': MODEL_END_YEAR,
@@ -334,6 +339,28 @@ class BENCHModel:
             self.learning_mechanism.update_satisfaction(household, self.year)
             self.learning_mechanism.update_regret(household, {}, self.year)
     
+    def _apply_social_learning(self) -> None:
+        """Apply the selected learning algorithm to households after 2015."""
+        if self.year < 2016 or self.learning_type == "No learning":
+            return
+
+        for household in self.households:
+            if not household.act1:
+                continue
+
+            neighbors = [h for h in self.households if h.h_id != household.h_id]
+            if not neighbors:
+                continue
+
+            self.learning_mechanism.apply_learning(
+            household,
+            neighbors,
+            self.year,
+            self.learning_type
+        )
+        self.learning_mechanism.update_satisfaction(household, self.year)
+        self.learning_mechanism.update_regret(household, {}, self.year)
+
     def run(self, verbose: bool = True) -> bool:
         """
         Run complete simulation from 2015 to 2030.

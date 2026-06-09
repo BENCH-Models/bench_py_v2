@@ -4,7 +4,11 @@ Social learning and network influence mechanisms
 
 from typing import Dict, List
 import random
-from utils.constants import BEHAVIORAL_SCALE_MAX
+from utils.constants import (
+    ACTION_INVESTMENT,
+    ACTION_SWITCHING,
+    BEHAVIORAL_SCALE_MAX,
+)
 
 
 class LearningMechanism:
@@ -75,7 +79,81 @@ class LearningMechanism:
         
         # Store learning event
         self._record_learning(household, year, avg_knowledge, avg_awareness)
-    
+
+    def apply_learning(self, source_household, neighboring_households: List,
+                       year: int, learning_type: str) -> None:
+        """
+        Apply the selected learning algorithm to neighbors.
+        
+        Learning modes are based on NetLogo logic:
+        - No learning: no neighbor influence.
+        - Fast adaptation: rapid transmission from households that invested.
+        - Slow adaptation: weaker influence over the same behaviors.
+        - Observation: peers observe actions and slowly adjust awareness.
+        - Promote switching: emphasis on switching norms and PBC.
+        """
+        if learning_type == "No learning" or year < 2016:
+            return
+
+        if not source_household.act1:
+            return
+
+        if not neighboring_households:
+            return
+
+        if learning_type == "Fast adaptation":
+            sample_count = min(2, len(neighboring_households))
+            influence = 0.35
+        elif learning_type == "Slow adaptation":
+            sample_count = min(2, len(neighboring_households))
+            influence = 0.15
+        elif learning_type == "Observation":
+            sample_count = min(5, len(neighboring_households))
+            influence = 0.10
+        elif learning_type == "Promote switching":
+            sample_count = min(3, len(neighboring_households))
+            influence = 0.25
+        else:
+            sample_count = min(2, len(neighboring_households))
+            influence = 0.10
+
+        neighbors = random.sample(neighboring_households, sample_count)
+
+        for neighbor in neighbors:
+            if learning_type in ["Fast adaptation", "Slow adaptation"]:
+                knowledge_gain = influence * (source_household.know - neighbor.know)
+                awareness_gain = influence * (source_household.h_aware - neighbor.h_aware)
+                neighbor.know = min(max(neighbor.know + max(knowledge_gain, 0.0), 0.0), BEHAVIORAL_SCALE_MAX)
+                neighbor.cee_aw = min(max(neighbor.cee_aw + max(awareness_gain, 0.0), 0.0), BEHAVIORAL_SCALE_MAX)
+                neighbor.update_awareness()
+                neighbor.su_nor[ACTION_INVESTMENT] = min(
+                    neighbor.su_nor[ACTION_INVESTMENT] + influence * 0.5,
+                    BEHAVIORAL_SCALE_MAX
+                )
+
+            elif learning_type == "Observation":
+                if source_household.act1:
+                    neighbor.know = min(neighbor.know + influence * 0.5, BEHAVIORAL_SCALE_MAX)
+                    neighbor.cee_aw = min(neighbor.cee_aw + influence * 0.25, BEHAVIORAL_SCALE_MAX)
+                    neighbor.update_awareness()
+                neighbor.su_nor[ACTION_INVESTMENT] = min(
+                    neighbor.su_nor[ACTION_INVESTMENT] + influence * 0.25,
+                    BEHAVIORAL_SCALE_MAX
+                )
+
+            elif learning_type == "Promote switching":
+                neighbor.su_nor[ACTION_SWITCHING] = min(
+                    neighbor.su_nor[ACTION_SWITCHING] + influence * 0.6,
+                    BEHAVIORAL_SCALE_MAX
+                )
+                neighbor.pbc[ACTION_SWITCHING] = min(
+                    neighbor.pbc[ACTION_SWITCHING] + influence * 0.4,
+                    BEHAVIORAL_SCALE_MAX
+                )
+                neighbor.update_awareness()
+
+        self._record_learning(source_household, year, source_household.know, source_household.h_aware)
+
     def update_satisfaction(self, household, year: int) -> None:
         """
         Update satisfaction based on action outcomes.
@@ -222,25 +300,3 @@ class LearningMechanism:
             'peer_knowledge': peer_knowledge,
             'awareness_change': peer_awareness - household.h_aware,
         })
-    
-    def get_network_effect(self, household, neighboring_households: List) -> float:
-        """
-        Get aggregate network effect on household (0-1 scale).
-        Higher = more positive influence from neighbors.
-        
-        Args:
-            household: Household object
-            neighboring_households: List of neighboring household objects
-            
-        Returns:
-            Network effect score (0-1)
-        """
-        if not neighboring_households:
-            return 0.5
-        
-        # Count neighbors who took any action
-        actions_taken = sum(1 for hh in neighboring_households if sum(hh.hh_actions) > 0)
-        
-        effect = 0.5 + (0.5 * actions_taken / len(neighboring_households))
-        
-        return min(effect, 1.0)
