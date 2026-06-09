@@ -96,36 +96,36 @@ class Household:
         self.consideration = [GUILT_LOW, GUILT_LOW, GUILT_LOW]  # 'L' or 'H' for each action
         
         # === UTILITIES (Budget/consumption combinations) ===
-        # z_lce/z_ff/z_zero: discretionary income for different scenarios
-        self.z_lce = [0.0, 0.0, 0.0]  # z_lce1, z_lce2, z_lce3
-        self.z_ff = [0.0, 0.0, 0.0]   # z_ff1, z_ff2, z_ff3
-        self.z_zero = [0.0, 0.0, 0.0] # z_zero1, z_zero2, z_zero3
+        # z_brown/z_grey/z_green: discretionary income for different scenarios
+        self.z_brown = [0.0, 0.0, 0.0]  # z_brown1, z_brown2, z_brown3
+        self.z_grey = [0.0, 0.0, 0.0]   # z_grey1, z_grey2, z_grey3
+        self.z_green = [0.0, 0.0, 0.0] # z_green1, z_green2, z_green3
         
         # Normalized z values (0-1)
-        self.z_lce_norm = [0.0, 0.0, 0.0]
-        self.z_ff_norm = [0.0, 0.0, 0.0]
-        self.z_zero_norm = [0.0, 0.0, 0.0]
+        self.z_brown_norm = [0.0, 0.0, 0.0]
+        self.z_grey_norm = [0.0, 0.0, 0.0]
+        self.z_green_norm = [0.0, 0.0, 0.0]
         
         # === EXPECTED UTILITIES ===
-        # LCE (green electricity) utilities
-        self.utility_exp_lce = [0.0, 0.0, 0.0]  # UE_lce1, UE_lce2, UE_lce31
+        # green electricity utilities
+        self.utility_exp_brown = [0.0, 0.0, 0.0]  # UE_brown1, UE_brown2, UE_brown3
         
-        # FF (grey electricity) utilities
-        self.utility_exp_ff = [0.0, 0.0, 0.0]   # UE_ff1, UE_ff2, UE_ff32
+        # grey electricity utilities
+        self.utility_exp_grey = [0.0, 0.0, 0.0]   # UE_grey1, UE_grey2, UE_grey3
         
         # Zero-carbon utilities
-        self.utility_exp_zero = [0.0, 0.0, 0.0]  # UE_zero1, UE_zero2, UE_zero3
+        self.utility_exp_green = [0.0, 0.0, 0.0]  # UE_green1, UE_green2, UE_green3
         
         # === ACTUAL UTILITIES ===
-        self.utility_lce = [0.0, 0.0, 0.0]
-        self.utility_ff = [0.0, 0.0, 0.0]
-        self.utility_zero = [0.0, 0.0, 0.0]
+        self.utility_brown = [0.0, 0.0, 0.0]
+        self.utility_grey = [0.0, 0.0, 0.0]
+        self.utility_green = [0.0, 0.0, 0.0]
         
         # === ACTIONS TAKEN (boolean flags) ===
         # Action 1: Investment (PV installation)
         self.act1 = False
-        self.act11 = False  # Specific to LCE
-        self.act12 = False  # Specific to FF
+        self.act11 = False  # Specific to Brown
+        self.act12 = False  # Specific to Grey
         
         # Action 2: Conservation (energy efficiency)
         self.act2 = False
@@ -135,8 +135,8 @@ class Household:
         
         # Action 3: Switching (to renewable)
         self.act3 = False
-        self.act31 = False  # Switch to green
-        self.act32 = False  # Switch from green to super-green
+        self.act31 = False  # Switch to brown
+        self.act32 = False  # Switch from brown to green
         
         # Action vector: [act11, act12, act21, act40, act31, act32]
         self.hh_actions = [0, 0, 0, 0, 0, 0]
@@ -263,44 +263,44 @@ class Household:
         Calculate discretionary income (z) for different scenarios.
         
         Args:
-            prices: Dictionary with keys 'm_p_ff', 'm_p_lce', 'm_p_zero'
+            prices: Dictionary with keys 'm_p_grey', 'm_p_brown', 'm_p_green'
         """
         if self.h_q <= 0:
             return
         
-        m_p_ff = prices.get('m_p_ff', 0.1)
-        m_p_lce = prices.get('m_p_lce', 0.15)
-        m_p_zero = prices.get('m_p_zero', 0.12)
+        m_p_grey = prices.get('m_p_grey', 0.1)
+        m_p_brown = prices.get('m_p_brown', 0.15)
+        m_p_green = prices.get('m_p_green', 0.12)
         
         # Scenario 1: No action (baseline consumption)
-        base_fixed = 1700 * m_p_lce + 487.59  # Fixed costs
+        base_fixed = 1700 * m_p_brown + 487.59  # Fixed costs
         
-        self.z_lce[0] = self.h_income - ((self.h_q * m_p_lce) + base_fixed + 
+        self.z_brown[0] = self.h_income - ((self.h_q * m_p_brown) + base_fixed + 
                                           self.h_conserv_p + self.h_switch)
-        self.z_ff[0] = self.h_income - ((self.h_q * m_p_ff) + base_fixed + 
+        self.z_grey[0] = self.h_income - ((self.h_q * m_p_grey) + base_fixed + 
                                          self.h_conserv_p + self.h_switch)
-        self.z_zero[0] = self.h_income - ((self.h_q * m_p_zero) + base_fixed + 
+        self.z_green[0] = self.h_income - ((self.h_q * m_p_green) + base_fixed + 
                                            self.h_conserv_p + self.h_switch)
         
         # Scenario 2: After investment
-        self.z_lce[1] = self.h_income - ((self.h_q * m_p_lce) + self.h_invest_save * m_p_lce + 
-                                          self.h_invest + (0.5 * self.h_q * m_p_lce) + self.h_switch)
-        self.z_ff[1] = self.h_income - ((self.h_q * m_p_ff) + self.h_invest_save * m_p_ff + 
-                                         self.h_invest + (0.5 * self.h_q * m_p_ff) + self.h_switch)
-        self.z_zero[1] = self.h_income - ((self.h_q * m_p_zero) + self.h_invest_save * m_p_zero + 
-                                           self.h_invest + (0.5 * self.h_q * m_p_zero) + self.h_switch)
+        self.z_brown[1] = self.h_income - ((self.h_q * m_p_brown) + self.h_invest_save * m_p_brown + 
+                                          self.h_invest + (0.5 * self.h_q * m_p_brown) + self.h_switch)
+        self.z_grey[1] = self.h_income - ((self.h_q * m_p_grey) + self.h_invest_save * m_p_grey + 
+                                         self.h_invest + (0.5 * self.h_q * m_p_grey) + self.h_switch)
+        self.z_green[1] = self.h_income - ((self.h_q * m_p_green) + self.h_invest_save * m_p_green + 
+                                           self.h_invest + (0.5 * self.h_q * m_p_green) + self.h_switch)
         
         # Scenario 3: Complex switching scenarios
-        self.z_lce[2] = self.h_income - ((self.h_q * m_p_zero) + 
-                                          self.h_invest_save * m_p_zero + self.h_invest + 
-                                          self.h_conserv_p + (m_p_zero - m_p_lce))
-        self.z_ff[2] = self.h_income - ((self.h_q * m_p_lce) + 
-                                         self.h_invest_save * m_p_lce + self.h_invest + 
-                                         self.h_conserv_p + (m_p_lce - m_p_ff))
+        self.z_brown[2] = self.h_income - ((self.h_q * m_p_green) + 
+                                          self.h_invest_save * m_p_green + self.h_invest + 
+                                          self.h_conserv_p + (m_p_green - m_p_brown))
+        self.z_grey[2] = self.h_income - ((self.h_q * m_p_brown) + 
+                                         self.h_invest_save * m_p_brown + self.h_invest + 
+                                         self.h_conserv_p + (m_p_brown - m_p_grey))
         
         # Check for low-paid status
-        if (self.z_ff[0] < 0 or self.z_ff[1] < 0 or self.z_lce[0] < 0 or 
-            self.z_lce[1] < 0 or self.z_zero[0] < 0):
+        if (self.z_grey[0] < 0 or self.z_grey[1] < 0 or self.z_brown[0] < 0 or 
+            self.z_brown[1] < 0 or self.z_green[0] < 0):
             self.hh_sta = "Low-paid"
     
     def get_action_status(self) -> Dict[str, bool]:

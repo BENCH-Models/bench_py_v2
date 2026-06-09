@@ -75,18 +75,25 @@ POLICIES = [
     "Carbon price pressure-100",
     "Carbon price pressure-2020"
 ]
+CARBON_POLICY_TARGETS = {
+    "Ref": 0.0,
+    "Carbon price pressure-10": 10.0,
+    "Carbon price pressure-25": 25.0,
+    "Carbon price pressure-50": 50.0,
+    "Carbon price pressure-100": 100.0,
+}
+
 
 # Emission factors by electricity source
 EMISSIONS_FACTOR_GRAY = 0.5   # kg CO2 per kWh for gray electricity
 EMISSIONS_FACTOR_BROWN = 0.3  # kg CO2 per kWh for brown electricity
 EMISSIONS_FACTOR_GREEN = 0.0  # kg CO2 per kWh for green electricity
+KG_TO_TONS = 0.001            # Conversion factor (1 kg = 0.001 metric tons)
 
 LEARNING_TYPES = [
     "No learning",
     "Fast adaptation",
     "Slow adaptation",
-    "Observation",
-    "Promote switching"
 ]
 DEFAULT_LEARNING_TYPE = "No learning"
 
@@ -198,3 +205,9 @@ MEMORY_RULES = {
         }
     }
 }
+
+
+M_P_GREY_BASE = 0.15
+M_P_BROWN_BASE = 0.15
+M_P_GREEN_BASE = 0.15
+

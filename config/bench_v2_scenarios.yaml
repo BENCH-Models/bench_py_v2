@@ -4,6 +4,12 @@
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
   policy: Ref
+  learning_type: No learning
+  run_label: Baseline
+
+- case_study: Netherlands-Overijssel
+  scenario: Ref_SSP2
+  policy: Ref
   learning_type: Slow adaptation
   run_label: SD
 

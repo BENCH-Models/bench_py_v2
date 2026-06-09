@@ -165,52 +165,6 @@ class DataLoader:
         """Return all household data as DataFrame."""
         return self.households_df.copy() if self.households_df is not None else pd.DataFrame()
     
-    def get_price_at_year(self, policy: str, year: int, column: int = 0) -> float:
-        """
-        Get electricity price for a specific year and policy.
-        
-        Args:
-            policy: Policy scenario name
-            year: Target year (2015-2030)
-            column: Column index in price matrix (0=reference, 1+=scenarios)
-            
-        Returns:
-            Price value
-        """
-        if self.prices_df is None or year < MODEL_START_YEAR or year > MODEL_END_YEAR:
-            return 0.15  # Default fallback price
-        
-        # Map year to row index (2015=row 0, 2016=row 1, etc.)
-        row_idx = year - MODEL_START_YEAR
-        
-        if row_idx >= len(self.prices_df):
-            return self.prices_df.iloc[-1, column]
-        
-        value = self.prices_df.iloc[row_idx, column]
-        
-        # Handle NaN values
-        return float(value) if pd.notna(value) else 0.15
-    
-    def get_price_scenario_index(self, policy: str) -> int:
-        """
-        Map policy scenario name to column index in price matrix.
-        
-        Args:
-            policy: Policy name
-            
-        Returns:
-            Column index (0=reference, 1+=scenarios)
-        """
-        policy_mapping = {
-            'Ref': 0,
-            'Carbon price pressure-10': 2,
-            'Carbon price pressure-25': 4,
-            'Carbon price pressure-50': 6,
-            'Carbon price pressure-100': 8,
-            'Carbon price pressure-2020': 10,
-        }
-        return policy_mapping.get(policy, 0)
-    
     def get_household_income_groups(self) -> Dict[int, List[int]]:
         """
         Get list of household IDs grouped by income group.

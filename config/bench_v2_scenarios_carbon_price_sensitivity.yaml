@@ -3,6 +3,12 @@
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
+  policy: Ref
+  learning_type: Fast adaptation
+  run_label: Baseline_NoCP
+
+- case_study: Netherlands-Overijssel
+  scenario: Ref_SSP2
   policy: Carbon price pressure-10
   learning_type: Fast adaptation
   run_label: FDC10

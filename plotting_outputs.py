@@ -160,13 +160,13 @@ def plot_batch_for_config(config_file: str, output_root: str):
     saved_plots = []
     # time series to compare across runs
     comparison_vars = [
-        'lce_share_percent',
-        'action_1_count',
-        'action_2_count',
-        'action_3_count',
-        'total_energy_saved_kwh',
-        'total_emissions_avoided_kg_co2',
-        'total_investment',
+        #'lce_share_percent',
+        #'action_1_count',
+        #'action_2_count',
+        #'action_3_count',
+        #'total_energy_saved_kwh',
+        #'total_emissions_avoided_kg_co2',
+        #'total_investment',
         'co2_emitted_tons_per_capita'
     ]
 

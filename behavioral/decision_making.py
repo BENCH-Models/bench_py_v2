@@ -90,18 +90,12 @@ class DecisionMaker:
         # Proceed based on current energy source
         if household.flag == 0:  # Currently gray electricity
             actions_taken = self._decide_grey_household(household, utility_calculator)
-            print(f"Household {household.h_id} (gray): Actions taken: {actions_taken}")
-            quit()
 
         elif household.flag == 1:  # Currently brown electricity
             actions_taken = self.__decide_brown_household(household, utility_calculator)
-            print(f"Household {household.h_id} (brown): Actions taken: {actions_taken}")
-            quit()
 
         elif household.flag == 2:  # Currently green electricity
             actions_taken = self._decide_green_household(household, utility_calculator)
-            print(f"Household {household.h_id} (green): Actions taken: {actions_taken}")
-            quit()
         
         return actions_taken
     
@@ -111,11 +105,11 @@ class DecisionMaker:
         
         # Action 1: Investment (PV)
         if not household.act11:
-            if (household.utility_exp_lce[0] >= max(
-                household.utility_exp_lce[0],
-                household.utility_exp_lce[1],
-                household.utility_exp_lce[2]
-            ) and household.utility_exp_lce[0] >= household.utility_lce[0]):
+            if (household.utility_exp_brown[0] >= max(
+                household.utility_exp_brown[0],
+                household.utility_exp_brown[1],
+                household.utility_exp_brown[2]
+            ) and household.utility_exp_brown[0] >= household.utility_brown[0]):
                 household.act1 = True
                 household.act11 = True
                 household.hh_actions[0] = 1
@@ -123,11 +117,11 @@ class DecisionMaker:
         
         # Action 2: Conservation
         if not household.act21:
-            if (household.utility_exp_lce[1] >= max(
-                household.utility_exp_lce[0],
-                household.utility_exp_lce[1],
-                household.utility_exp_lce[2]
-            ) and household.utility_exp_lce[1] >= household.utility_lce[1]):
+            if (household.utility_exp_brown[1] >= max(
+                household.utility_exp_brown[0],
+                household.utility_exp_brown[1],
+                household.utility_exp_brown[2]
+            ) and household.utility_exp_brown[1] >= household.utility_brown[1]):
                 household.act2 = True
                 household.act21 = True
                 household.act50 = True
@@ -136,11 +130,11 @@ class DecisionMaker:
         
         # Action 3: Switching to green electricity
         if not (household.act31 or household.act32):
-            if (household.utility_exp_lce[2] >= max(
-                household.utility_exp_lce[0],
-                household.utility_exp_lce[1],
-                household.utility_exp_lce[2]
-            ) and household.utility_exp_lce[2] >= household.utility_lce[2]):
+            if (household.utility_exp_brown[2] >= max(
+                household.utility_exp_brown[0],
+                household.utility_exp_brown[1],
+                household.utility_exp_brown[2]
+            ) and household.utility_exp_brown[2] >= household.utility_brown[2]):
                 household.act3 = True
                 household.act31 = True
                 household.flag = 2  # Switch to green electricity
@@ -155,11 +149,11 @@ class DecisionMaker:
         
         # Action 1: Investment (PV)
         if not household.act12:
-            if (household.utility_exp_ff[0] >= max(
-                household.utility_exp_ff[0],
-                household.utility_exp_ff[1],
-                household.utility_exp_ff[2]
-            ) and household.utility_exp_ff[0] >= household.utility_ff[0]):
+            if (household.utility_exp_grey[0] >= max(
+                household.utility_exp_grey[0],
+                household.utility_exp_grey[1],
+                household.utility_exp_grey[2]
+            ) and household.utility_exp_grey[0] >= household.utility_grey[0]):
                 household.act1 = True
                 household.act12 = True
                 household.hh_actions[1] = 1
@@ -167,11 +161,11 @@ class DecisionMaker:
         
         # Action 2: Conservation
         if not household.act40:
-            if (household.utility_exp_ff[1] >= max(
-                household.utility_exp_ff[0],
-                household.utility_exp_ff[1],
-                household.utility_exp_ff[2]
-            ) and household.utility_exp_ff[1] >= household.utility_ff[1]):
+            if (household.utility_exp_grey[1] >= max(
+                household.utility_exp_grey[0],
+                household.utility_exp_grey[1],
+                household.utility_exp_grey[2]
+            ) and household.utility_exp_grey[1] >= household.utility_grey[1]):
                 household.act2 = True
                 household.act50 = True
                 household.act40 = True
@@ -180,11 +174,11 @@ class DecisionMaker:
         
         # Action 3: Switching to brown electricity
         if not household.act32:
-            if (household.utility_exp_ff[2] >= max(
-                household.utility_exp_ff[0],
-                household.utility_exp_ff[1],
-                household.utility_exp_ff[2]
-            ) and household.utility_exp_ff[2] >= household.utility_ff[2]):
+            if (household.utility_exp_grey[2] >= max(
+                household.utility_exp_grey[0],
+                household.utility_exp_grey[1],
+                household.utility_exp_grey[2]
+            ) and household.utility_exp_grey[2] >= household.utility_grey[2]):
                 household.act3 = True
                 household.act32 = True
                 household.flag = 1  # Switch to brown electricity
@@ -199,10 +193,10 @@ class DecisionMaker:
         
         # Action 1: Further Investment
         if not household.act11:
-            if (household.utility_exp_zero[0] >= max(
-                household.utility_exp_zero[0],
-                household.utility_exp_zero[1]
-            ) and household.utility_exp_zero[0] >= household.utility_zero[0]):
+            if (household.utility_exp_green[0] >= max(
+                household.utility_exp_green[0],
+                household.utility_exp_green[1]
+            ) and household.utility_exp_green[0] >= household.utility_green[0]):
                 household.act1 = True
                 household.act11 = True
                 household.hh_actions[0] = 1
@@ -210,16 +204,16 @@ class DecisionMaker:
         
         # Action 2: Conservation (already implemented)
         if not household.act21:
-            if (household.utility_exp_zero[1] >= max(
-                household.utility_exp_zero[0],
-                household.utility_exp_zero[1]
-            ) and household.utility_exp_zero[1] >= household.utility_zero[1]):
+            if (household.utility_exp_green[1] >= max(
+                household.utility_exp_green[0],
+                household.utility_exp_green[1]
+            ) and household.utility_exp_green[1] >= household.utility_green[1]):
                 household.act2 = True
                 household.act21 = True
                 household.hh_actions[2] = 1
                 actions[1] = True
         
-        # No switching action for SLCE (already at top tier)
+        # No switching action for green households, already at low carbon
         
         return actions
     
@@ -248,7 +242,7 @@ class DecisionMaker:
             household.h_conserv = conservation_amount
             
             # Calculate money saved
-            price = prices.get('m_p_ff', 0.15) if household.flag == 0 else prices.get('m_p_lce', 0.15)
+            price = prices.get('m_p_grey', 0.15) if household.flag == 0 else prices.get('m_p_brown', 0.15)
             household.h_conserv_p = conservation_amount * price
         
         return energy_saved
@@ -277,8 +271,8 @@ class DecisionMaker:
         
         # Switching benefit (price difference)
         if household.act3 or household.act31 or household.act32:
-            old_price = prices.get('m_p_ff', 0.15) if household.flag != 0 else prices.get('m_p_lce', 0.15)
-            new_price = prices.get('m_p_lce', 0.15) if household.flag == 0 else prices.get('m_p_zero', 0.12)
+            old_price = prices.get('m_p_grey', 0.15) if household.flag != 0 else prices.get('m_p_brown', 0.15)
+            new_price = prices.get('m_p_brown', 0.15) if household.flag == 0 else prices.get('m_p_green', 0.12)
             switching_benefit = (old_price - new_price) * household.h_q
             household.h_switch = switching_benefit
         

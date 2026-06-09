@@ -5,6 +5,7 @@ Orchestrates the entire simulation workflow
 
 import os
 import re
+import math
 import random
 import datetime
 from typing import Dict, List, Optional
@@ -16,7 +17,8 @@ from behavioral.learning import LearningMechanism
 from utils.statistics import StatisticsAggregator
 from utils.output import ResultsExporter
 from utils.constants import (
-    MODEL_START_YEAR, MODEL_END_YEAR,
+    CARBON_POLICY_TARGETS, EMISSIONS_FACTOR_GRAY, EMISSIONS_FACTOR_BROWN, EMISSIONS_FACTOR_GREEN, KG_TO_TONS,
+    M_P_GREEN_BASE, M_P_BROWN_BASE, M_P_GREY_BASE, MODEL_START_YEAR, MODEL_END_YEAR,
     INCOME_GROUPS, DWELLING_LABELS,
     FLAG_NAMES, OUTPUT_DIR,
     DEFAULT_LEARNING_TYPE
@@ -78,12 +80,14 @@ class BENCHModel:
         self.households = []
         self.n_households = 0
         
-        # Market state
+        # Market state initially
         self.prices = {
-            'm_p_ff': 0.15,
-            'm_p_lce': 0.17,
-            'm_p_zero': 0.12,
+            'm_p_grey': M_P_GREY_BASE,
+            'm_p_brown': M_P_BROWN_BASE,
+            'm_p_green': M_P_GREEN_BASE,
         }
+
+
         
         # Components
         self.data_loader = DataLoader(base_path)
@@ -214,6 +218,7 @@ class BENCHModel:
                 self.households.append(household)
             
             self.n_households = len(self.households)
+            self._place_households_on_grid()
             print(f"✓ Created {self.n_households} household agents")
             return True
             
@@ -221,6 +226,49 @@ class BENCHModel:
             print(f"✗ Error creating agents: {e}")
             return False
     
+    def _place_households_on_grid(self) -> None:
+        """Place households onto a rectangular grid and index their neighbors."""
+        if self.n_households == 0:
+            return
+
+        grid_side = math.ceil(math.sqrt(self.n_households))
+        self.grid_width = grid_side
+        self.grid_height = math.ceil(self.n_households / self.grid_width)
+
+        grid_cells = [
+            (x, y)
+            for y in range(self.grid_height)
+            for x in range(self.grid_width)
+        ][: self.n_households]
+        random.shuffle(grid_cells)
+
+        for household, (x, y) in zip(self.households, grid_cells):
+            household.grid_x = x
+            household.grid_y = y
+
+        self.grid_index = {
+            (household.grid_x, household.grid_y): household
+            for household in self.households
+        }
+
+    def _get_grid_neighbors(self, household) -> List[Household]:
+        """Return the 8 adjacent grid neighbors for a household."""
+        if not hasattr(household, 'grid_x') or not hasattr(household, 'grid_y'):
+            return []
+
+        adjacent_positions = [
+            (household.grid_x + dx, household.grid_y + dy)
+            for dx in (-1, 0, 1)
+            for dy in (-1, 0, 1)
+            if not (dx == 0 and dy == 0)
+        ]
+
+        return [
+            self.grid_index[pos]
+            for pos in adjacent_positions
+            if pos in self.grid_index
+        ]
+
     def _print_agent_summary(self) -> None:
         """Print summary of created agents."""
         if self.n_households == 0:
@@ -299,7 +347,7 @@ class BENCHModel:
             # 10. Learning
             self.learning_mechanism.update_memory(household, self.year)
         
-        # 11. Social learning (simplified - each HH learns from random sample)
+        # 11. Social learning (grid adjacency: each HH learns from direct neighbors)
         self._apply_social_learning()
         
         # 12. Aggregate statistics
@@ -322,51 +370,58 @@ class BENCHModel:
                 household, {}, household.h_income_group,
                 household.flag, self.case_study
             )
-    
+
     def _update_prices(self) -> None:
-        """Update electricity prices based on policy scenario."""
-        # Get price column index for policy
-        col_ff = self.data_loader.get_price_scenario_index(self.policy)
-        col_lce = col_ff + 1 if col_ff > 0 else 0
-        
-        # Get price from table for current year
-        price_ff = self.data_loader.get_price_at_year(self.policy, self.year, col_ff)
-        price_lce = self.data_loader.get_price_at_year(self.policy, self.year, col_lce)
-        
-        self.prices['m_p_ff'] = price_ff if price_ff > 0 else self.prices['m_p_ff']
-        self.prices['m_p_lce'] = price_lce if price_lce > 0 else self.prices['m_p_lce']
-        self.prices['m_p_zero'] = price_lce * 0.85  # Zero-carbon slightly cheaper
-    
-    def _apply_social_learning(self) -> None:
-        """Apply social learning to all households."""
-        for household in self.households:
-            # Get random sample of other households as neighbors
-            neighbors = random.sample(
-                [h for h in self.households if h.h_id != household.h_id],
-                min(10, self.n_households - 1)  # 10 neighbors max
-            )
+        """
+        Update market electricity prices dynamically based on the active policy scenario.
+        Extracts target carbon values using a clean constant dictionary mapping lookup.
+        """
+        # 1. Direct dictionary key resolution with a safe fallback default (0.0 for Ref/unknown)
+        target_carbon_price_2030 = CARBON_POLICY_TARGETS.get(self.policy, 0.0)
+                
+        # 2. Compute the Carbon Tax Trajectory over our linear timeline window
+        carbon_tax_per_kwh_grey = 0.0
+        carbon_tax_per_kwh_brown = 0.0
+        current_tax_per_ton = 0.0
+
+        if self.year >= 2017 and target_carbon_price_2030 > 0.0:
+            # Freeze the tax progression timeline at the year 2030 ceiling boundary
+            tax_year = min(self.year, 2030)
             
-            self.learning_mechanism.learn_from_peers(household, neighbors, self.year)
-    
+            # Calculate linear step fraction scaling from 2017 to 2030
+            progression = (tax_year - 2017) / (2030 - 2017)
+            current_tax_per_ton = target_carbon_price_2030 * progression
+            
+            # Convert €/ton to €/kWh:
+            tax_per_kg = current_tax_per_ton * KG_TO_TONS
+            carbon_tax_per_kwh_grey = tax_per_kg * EMISSIONS_FACTOR_GRAY
+            carbon_tax_per_kwh_brown = tax_per_kg * EMISSIONS_FACTOR_BROWN
+
+        # 3. Apply final calculated values to the active price variables
+        self.prices['m_p_grey'] = M_P_GREY_BASE + carbon_tax_per_kwh_grey
+        self.prices['m_p_brown'] = M_P_BROWN_BASE + carbon_tax_per_kwh_brown
+        self.prices['m_p_green'] = M_P_GREEN_BASE  # Renewable track avoids emissions penalties
+
     def _apply_social_learning(self) -> None:
         """Apply the selected learning algorithm to households after 2015."""
         if self.year < 2016 or self.learning_type == "No learning":
             return
 
         for household in self.households:
-            if not household.act1:
-                continue
+            # 1. Check the central household FIRST. 
+            # If it hasn't done ANY of these actions, skip immediately.
+            if not (household.act1 or household.act3 or household.act50):
+                continue  # Skip to the next household
 
-            neighbors = [h for h in self.households if h.h_id != household.h_id]
-            if not neighbors:
-                continue
-
+            # 2. Only fetch neighbors and do heavy math if the central household is active
+            neighbors = self._get_grid_neighbors(household)
+            
             self.learning_mechanism.apply_learning(
-            household,
-            neighbors,
-            self.year,
-            self.learning_type
-        )
+                household,
+                neighbors,
+                self.year,
+                self.learning_type
+            )
 
     def run(self, verbose: bool = True) -> bool:
         """

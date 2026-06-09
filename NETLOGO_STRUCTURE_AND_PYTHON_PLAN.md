@@ -96,9 +96,9 @@ ESP_pol.*                 - Shapefile data (political boundaries)
 - `delta1`, `delta2`, `delta3` - Behavioral adjustment factors (0.2-0.7)
 
 **Utilities:**
-- `utility_exp_lce1/2/31`, `utility_exp_ff1/2/32`, `utility_exp_zero1/2/3` - Expected utilities
-- `utility_lce1/2/31`, `utility_ff1/2/32`, `utility_zero1/2/3` - Actual utilities
-- `z_lce1/2/3`, `z_ff1/2/3`, `z_zero1/2` - Budget/consumption combinations
+- `utility_exp_brown1/2/31`, `utility_exp_grey1/2/32`, `utility_exp_green1/2/3` - Expected utilities
+- `utility_brown1/2/31`, `utility_grey1/2/32`, `utility_green1/2/3` - Actual utilities
+- `z_brown1/2/3`, `z_grey1/2/3`, `z_green1/2` - Budget/consumption combinations
 
 **Actions Taken:**
 - `act1`, `act11`, `act12` - Investment (PV installation)
@@ -138,9 +138,9 @@ ESP_pol.*                 - Shapefile data (political boundaries)
 - `h_lceshare` - Share of renewable consumption (%)
 
 **Market Variables:**
-- `m_p_ff` - Market price grey electricity (€/kWh)
-- `m_p_lce` - Market price green electricity (€/kWh)
-- `m_p_zero` - Market price zero-carbon electricity
+- `m_p_grey` - Market price grey electricity (€/kWh)
+- `m_p_brown` - Market price green electricity (€/kWh)
+- `m_p_green` - Market price zero-carbon electricity
 - `p_star_ff`, `p_star_lce`, `p_star_zero` - Prices after market clearing
 
 **Action Counters (per year):**
@@ -176,7 +176,7 @@ ESP_pol.*                 - Shapefile data (political boundaries)
 
 **Awareness & Motivation (Population Level):**
 - `aware_total` - Sum of household awareness
-- `utility_exp_lce`, `utility_exp_ff` - Expected utilities
+- `utility_exp_brown`, `utility_exp_grey` - Expected utilities
 
 **Network Variables:**
 - `ngb_*` - Various neighbor/network influence variables

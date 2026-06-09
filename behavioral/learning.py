@@ -23,135 +23,74 @@ class LearningMechanism:
         self.network_influence = {}  # Track influence between households
         self.learning_history = {}  # Historical learning data
     
-    def learn_from_peers(self, household, neighboring_households: List, 
-                        year: int) -> None:
-        """
-        Update household attributes based on neighboring households' experiences.
-        
-        Mechanisms:
-        - Knowledge spreads from high-awareness to low-awareness neighbors
-        - Action success influences motivation
-        - Price experiences spread through network
-        
-        Args:
-            household: Household object
-            neighboring_households: List of nearby household objects
-            year: Current simulation year
-        """
-        if not neighboring_households:
-            return
-        
-        # Average peer characteristics (simplified social learning)
-        avg_knowledge = 0.0
-        avg_awareness = 0.0
-        actions_count = 0
-        
-        for neighbor in neighboring_households:
-            avg_knowledge += neighbor.know
-            avg_awareness += neighbor.h_aware
-            actions_count += sum(neighbor.hh_actions)
-        
-        n = len(neighboring_households)
-        if n == 0:
-            return
-        
-        avg_knowledge /= n
-        avg_awareness /= n
-        
-        # Update own knowledge with influence factor (0.1 = 10% of peer influence)
-        influence_factor = 0.1
-        if household.know < avg_knowledge:
-            household.know += influence_factor * (avg_knowledge - household.know)
-            household.know = min(household.know, BEHAVIORAL_SCALE_MAX)
-        
-        if household.cee_aw < avg_awareness:
-            household.cee_aw += influence_factor * (avg_awareness - household.cee_aw)
-            household.cee_aw = min(household.cee_aw, BEHAVIORAL_SCALE_MAX)
-        
-        # Social norms: see peers take actions
-        if actions_count > 0:
-            action_fraction = actions_count / n
-            # Increase social norms if peers are acting
-            for i in range(3):
-                household.su_nor[i] = min(
-                    household.su_nor[i] + influence_factor * action_fraction,
-                    BEHAVIORAL_SCALE_MAX
-                )
-        
-        # Store learning event
-        self._record_learning(household, year, avg_knowledge, avg_awareness)
-
     def apply_learning(self, source_household, neighboring_households: List,
                        year: int, learning_type: str) -> None:
         """
         Apply the selected learning algorithm to neighbors.
-        
-        Learning modes are based on NetLogo logic:
+
+        Learning modes:
         - No learning: no neighbor influence.
-        - Fast adaptation: rapid transmission from households that invested.
-        - Slow adaptation: weaker influence over the same behaviors.
-        - Observation: peers observe actions and slowly adjust awareness.
-        - Promote switching: emphasis on switching norms and PBC.
+        - Fast adaptation: all households in the active neighborhood learn from each other.
+        - Slow adaptation: each active household interacts with up to two neighbors.
         """
-        if learning_type == "No learning" or year < 2016:
-            return
-
-        if not source_household.act1:
-            return
-
-        if not neighboring_households:
-            return
 
         if learning_type == "Fast adaptation":
-            sample_count = min(2, len(neighboring_households))
-            influence = 0.35
+            neighbors_subsample = list(neighboring_households)
         elif learning_type == "Slow adaptation":
             sample_count = min(2, len(neighboring_households))
-            influence = 0.15
-        elif learning_type == "Observation":
-            sample_count = min(5, len(neighboring_households))
-            influence = 0.10
-        elif learning_type == "Promote switching":
-            sample_count = min(3, len(neighboring_households))
-            influence = 0.25
+            neighbors_subsample = random.sample(neighboring_households, sample_count)
         else:
-            sample_count = min(2, len(neighboring_households))
-            influence = 0.10
+           ValueError(f"Unknown learning type: {learning_type}")
 
-        neighbors = random.sample(neighboring_households, sample_count)
+        # Build neighborhood statistics including the active source household.
 
-        for neighbor in neighbors:
-            if learning_type in ["Fast adaptation", "Slow adaptation"]:
-                knowledge_gain = influence * (source_household.know - neighbor.know)
-                awareness_gain = influence * (source_household.h_aware - neighbor.h_aware)
-                neighbor.know = min(max(neighbor.know + max(knowledge_gain, 0.0), 0.0), BEHAVIORAL_SCALE_MAX)
-                neighbor.cee_aw = min(max(neighbor.cee_aw + max(awareness_gain, 0.0), 0.0), BEHAVIORAL_SCALE_MAX)
+        know_values = [hh.know for hh in neighbors_subsample]
+        awareness_values = [hh.h_aware for hh in neighbors_subsample]
+        su_invest_values = [hh.su_nor[ACTION_INVESTMENT] for hh in neighbors_subsample]
+        pbc_switch_values = [hh.pbc[ACTION_SWITCHING] for hh in neighbors_subsample]
+
+        def mean(values):
+            return sum(values) / len(values) if values else 0.0
+
+        def median(values):
+            sorted_values = sorted(values)
+            n = len(sorted_values)
+            if n == 0:
+                return 0.0
+            mid = n // 2
+            return (sorted_values[mid] if n % 2 == 1 else (sorted_values[mid - 1] + sorted_values[mid]) / 2.0)
+
+        target_know = max(mean(know_values), median(know_values))
+        target_awareness = max(mean(awareness_values), median(awareness_values))
+        target_su_invest = max(mean(su_invest_values), median(su_invest_values))
+        target_pbc_switch = max(mean(pbc_switch_values), median(pbc_switch_values))
+
+        for neighbor in neighbors_subsample:#CENTRAL INDIVIDUAL TEACHES NEIGHBORS
+            if neighbor.know < target_know:
+                neighbor.know = min(neighbor.know * 1.05, BEHAVIORAL_SCALE_MAX)
+
+            if neighbor.h_aware < target_awareness:
+                neighbor.h_aware = min(neighbor.h_aware * 1.05, BEHAVIORAL_SCALE_MAX)
                 neighbor.update_awareness()
+
+            if neighbor.su_nor[ACTION_INVESTMENT] < target_su_invest:
                 neighbor.su_nor[ACTION_INVESTMENT] = min(
-                    neighbor.su_nor[ACTION_INVESTMENT] + influence * 0.5,
+                    neighbor.su_nor[ACTION_INVESTMENT] * 1.05,
                     BEHAVIORAL_SCALE_MAX
                 )
 
-            elif learning_type == "Observation":
-                if source_household.act1:
-                    neighbor.know = min(neighbor.know + influence * 0.5, BEHAVIORAL_SCALE_MAX)
-                    neighbor.cee_aw = min(neighbor.cee_aw + influence * 0.25, BEHAVIORAL_SCALE_MAX)
-                    neighbor.update_awareness()
-                neighbor.su_nor[ACTION_INVESTMENT] = min(
-                    neighbor.su_nor[ACTION_INVESTMENT] + influence * 0.25,
-                    BEHAVIORAL_SCALE_MAX
-                )
-
-            elif learning_type == "Promote switching":
-                neighbor.su_nor[ACTION_SWITCHING] = min(
-                    neighbor.su_nor[ACTION_SWITCHING] + influence * 0.6,
-                    BEHAVIORAL_SCALE_MAX
-                )
+            if neighbor.pbc[ACTION_SWITCHING] < target_pbc_switch:
                 neighbor.pbc[ACTION_SWITCHING] = min(
-                    neighbor.pbc[ACTION_SWITCHING] + influence * 0.4,
+                    neighbor.pbc[ACTION_SWITCHING] * 1.05,
                     BEHAVIORAL_SCALE_MAX
                 )
-                neighbor.update_awareness()
+
+        # Reinforce perceived behavioral control for the active household itself.
+        for action_index in range(len(source_household.pbc)):
+            source_household.pbc[action_index] = min(
+                source_household.pbc[action_index] * 1.05,
+                BEHAVIORAL_SCALE_MAX
+            )
 
         self._record_learning(source_household, year, source_household.know, source_household.h_aware)
 
