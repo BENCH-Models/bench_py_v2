@@ -137,7 +137,7 @@ def plot_batch_comparison(run_data: List[Tuple[str, pd.DataFrame]],
     plt.tight_layout()
     output_path = os.path.join(plots_dir, filename)
     plt.savefig(output_path)
-    plt.close()
+
     return output_path
 
 

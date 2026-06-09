@@ -15,10 +15,10 @@ DWELLING_LABELS = list(range(1, 7))
 DWELLING_LABEL_NAMES = ['A', 'B', 'C', 'D', 'E', 'F']
 
 # Energy Source Flags
-FLAG_GREY = 0           # Fossil fuel (FF)
-FLAG_GREEN = 1          # Low-carbon electricity (LCE)
-FLAG_SUPER_GREEN = 2    # Super-green (SLCE)
-FLAG_NAMES = {0: 'FF', 1: 'LCE', 2: 'SLCE'}
+FLAG_GRAY = 0           # Gray electricity (fossil-based)
+FLAG_BROWN = 1          # Brown electricity (mixed/less-clean)
+FLAG_GREEN = 2          # Green electricity (renewable)
+FLAG_NAMES = {0: 'gray', 1: 'brown', 2: 'green'}
 
 # Guilt Levels
 GUILT_LOW = 'L'
@@ -77,10 +77,9 @@ POLICIES = [
 ]
 
 # Emission factors by electricity source
-EMISSIONS_FACTOR_FF = 0.9   # kg CO2 per kWh for coal
-EMISSIONS_FACTOR_FF = 0.3   # kg CO2 per kWh for natural gas
-EMISSIONS_FACTOR_LCE = 0.0  # kg CO2 per kWh for low-carbon electricity
-EMISSIONS_FACTOR_SLCE = 0.0 # kg CO2 per kWh for super-low-carbon electricity
+EMISSIONS_FACTOR_GRAY = 0.5   # kg CO2 per kWh for gray electricity
+EMISSIONS_FACTOR_BROWN = 0.3  # kg CO2 per kWh for brown electricity
+EMISSIONS_FACTOR_GREEN = 0.0  # kg CO2 per kWh for green electricity
 
 LEARNING_TYPES = [
     "No learning",

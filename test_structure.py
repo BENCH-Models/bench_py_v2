@@ -96,7 +96,7 @@ def test_household_creation():
         )
         
         print(f"✓ Created household: ID={hh.h_id}, Income=€{hh.h_income}, Consumption={hh.h_q} kWh")
-        print(f"  - Energy source: {hh.flag} (0=FF, 1=LCE, 2=SLCE)")
+        print(f"  - Energy source: {hh.flag} (0=gray, 1=brown, 2=green)")
         print(f"  - Income group: {hh.h_income_group}")
         print(f"  - Dwelling label: {hh.dw_el}")
         

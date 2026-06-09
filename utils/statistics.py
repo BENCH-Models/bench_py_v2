@@ -6,9 +6,9 @@ from typing import Dict, List, Tuple
 from utils.constants import (
     FLAG_NAMES,
     DWELLING_LABEL_NAMES,
-    EMISSIONS_FACTOR_FF,
-    EMISSIONS_FACTOR_LCE,
-    EMISSIONS_FACTOR_SLCE,
+    EMISSIONS_FACTOR_GRAY,
+    EMISSIONS_FACTOR_BROWN,
+    EMISSIONS_FACTOR_GREEN,
 )
 
 
@@ -60,11 +60,11 @@ class StatisticsAggregator:
         total_emissions = 0.0
         for hh in households:
             if hh.flag == 0:
-                total_emissions += hh.h_q * EMISSIONS_FACTOR_FF
+                total_emissions += hh.h_q * EMISSIONS_FACTOR_GRAY
             elif hh.flag == 1:
-                total_emissions += hh.h_q * EMISSIONS_FACTOR_LCE
+                total_emissions += hh.h_q * EMISSIONS_FACTOR_BROWN
             elif hh.flag == 2:
-                total_emissions += hh.h_q * EMISSIONS_FACTOR_SLCE
+                total_emissions += hh.h_q * EMISSIONS_FACTOR_GREEN
         
         # === BEHAVIORAL METRICS ===
         avg_awareness = sum(hh.h_aware for hh in households) / n_households if n_households > 0 else 0

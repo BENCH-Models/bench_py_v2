@@ -6,7 +6,7 @@ Represents individual household decision-making and energy consumption
 import uuid
 from typing import Dict, List, Optional
 from utils.constants import (
-    FLAG_GREY, FLAG_GREEN, FLAG_SUPER_GREEN, FLAG_NAMES,
+    FLAG_GRAY, FLAG_BROWN, FLAG_GREEN, FLAG_NAMES,
     GUILT_LOW, GUILT_HIGH,
     ACTION_INVESTMENT, ACTION_CONSERVATION, ACTION_SWITCHING,
     BEHAVIORAL_SCALE_MAX, BEHAVIORAL_SCALE_MIN,
@@ -42,7 +42,7 @@ class Household:
             income_group: Income group (1-7)
             income: Annual household income
             consumption_q: Baseline electricity consumption (kWh/year)
-            energy_flag: Current energy source (0=FF, 1=LCE, 2=SLCE)
+            energy_flag: Current energy source (0=gray, 1=brown, 2=green)
             dwelling_label: Energy efficiency label (1-6, A-F)
             owner: Whether household owns dwelling (affects investment eligibility)
             **kwargs: Additional attributes from data
@@ -63,7 +63,7 @@ class Household:
         
         # === ENERGY CONSUMPTION ===
         self.h_q = consumption_q  # Base electricity consumption (kWh/year)
-        self.flag = energy_flag  # 0=FF, 1=LCE, 2=SLCE
+        self.flag = energy_flag  # 0=gray, 1=brown, 2=green
         
         # === BEHAVIORAL ATTRIBUTES (0-7 scale or specified range) ===
         self.know = kwargs.get('know', 0.0)  # Knowledge (0-7)

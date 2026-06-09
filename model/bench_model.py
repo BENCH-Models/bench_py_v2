@@ -227,8 +227,8 @@ class BENCHModel:
             return
         
         ff_count = sum(1 for hh in self.households if hh.flag == 0)
-        lce_count = sum(1 for hh in self.households if hh.flag == 1)
-        slce_count = sum(1 for hh in self.households if hh.flag == 2)
+        brown_count = sum(1 for hh in self.households if hh.flag == 1)
+        green_count = sum(1 for hh in self.households if hh.flag == 2)
         
         avg_income = sum(hh.h_income for hh in self.households) / self.n_households
         avg_consumption = sum(hh.h_q for hh in self.households) / self.n_households
@@ -237,9 +237,9 @@ class BENCHModel:
         print(f"\nAgent Summary (Baseline 2015):")
         print(f"  Total Households: {self.n_households}")
         print(f"  Energy Source Distribution:")
-        print(f"    - Fossil Fuel (FF): {ff_count} ({ff_count/self.n_households*100:.1f}%)")
-        print(f"    - Green (LCE): {lce_count} ({lce_count/self.n_households*100:.1f}%)")
-        print(f"    - Super-Green (SLCE): {slce_count} ({slce_count/self.n_households*100:.1f}%)")
+        print(f"    - Gray electricity: {ff_count} ({ff_count/self.n_households*100:.1f}%)")
+        print(f"    - Brown electricity: {brown_count} ({brown_count/self.n_households*100:.1f}%)")
+        print(f"    - Green electricity: {green_count} ({green_count/self.n_households*100:.1f}%)")
         print(f"  Average Income: €{avg_income:,.0f}")
         print(f"  Average Consumption: {avg_consumption:,.0f} kWh/year")
         print(f"  Average Awareness: {avg_awareness:.2f}")

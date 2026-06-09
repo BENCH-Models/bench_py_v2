@@ -87,13 +87,13 @@ class DecisionMaker:
             return actions_taken
         
         # Proceed based on current energy source
-        if household.flag == 1:  # Currently LCE (green)
+        if household.flag == 1:  # Currently brown electricity
             actions_taken = self._decide_lce_household(household, utility_calculator)
         
-        elif household.flag == 0:  # Currently FF (grey)
+        elif household.flag == 0:  # Currently gray electricity
             actions_taken = self._decide_ff_household(household, utility_calculator)
         
-        elif household.flag == 2:  # Currently SLCE (super-green)
+        elif household.flag == 2:  # Currently green electricity
             actions_taken = self._decide_slce_household(household, utility_calculator)
         
         return actions_taken
@@ -127,7 +127,7 @@ class DecisionMaker:
                 household.hh_actions[2] = 1
                 actions[1] = True
         
-        # Action 3: Switching to Super-Green (SLCE)
+        # Action 3: Switching to green electricity
         if not (household.act31 or household.act32):
             if (household.utility_exp_lce[2] >= max(
                 household.utility_exp_lce[0],
@@ -136,7 +136,7 @@ class DecisionMaker:
             ) and household.utility_exp_lce[2] >= household.utility_lce[2]):
                 household.act3 = True
                 household.act31 = True
-                household.flag = 2  # Switch to SLCE
+                household.flag = 2  # Switch to green electricity
                 household.hh_actions[4] = 1
                 actions[2] = True
         
@@ -171,7 +171,7 @@ class DecisionMaker:
                 household.hh_actions[3] = 1
                 actions[1] = True
         
-        # Action 3: Switching to Green (LCE)
+        # Action 3: Switching to brown electricity
         if not household.act32:
             if (household.utility_exp_ff[2] >= max(
                 household.utility_exp_ff[0],
@@ -180,7 +180,7 @@ class DecisionMaker:
             ) and household.utility_exp_ff[2] >= household.utility_ff[2]):
                 household.act3 = True
                 household.act32 = True
-                household.flag = 1  # Switch to LCE
+                household.flag = 1  # Switch to brown electricity
                 household.hh_actions[5] = 1
                 actions[2] = True
         
