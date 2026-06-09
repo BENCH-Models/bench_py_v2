@@ -143,8 +143,7 @@ class UtilityCalculator:
         Args:
             household: Household object
         """
-        # Actual utilities are determined by outcomes (simplified version)
-        # In full model, these would incorporate regret, satisfaction, etc.
+        # Actual utilities are determined by outcomes (simplified version).
         
         if household.flag == 0:  # Currently on FF
             household.utility_ff = household.utility_exp_ff.copy()

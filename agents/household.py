@@ -174,10 +174,6 @@ class Household:
         }
         self.experience = {}  # Track past experiences
         
-        # === SATISFACTION & REGRET ===
-        self.satisfaction = 0.0  # Satisfaction with past actions
-        self.regret = [0.0, 0.0, 0.0]  # Regret for each action type
-        
     def update_awareness(self) -> None:
         """Calculate average awareness from components."""
         self.h_aware = (self.know + self.cee_aw + self.ed_aw) / 3.0

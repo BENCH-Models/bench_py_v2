@@ -5,6 +5,7 @@ Implements knowledge, motivation, consideration, and action determination
 
 from typing import Dict, List, Tuple
 import random
+from agents import household
 from utils.constants import (
     ACTION_INVESTMENT, ACTION_CONSERVATION, ACTION_SWITCHING,
     INVESTMENT_PV_ANNUAL_COST, INVESTMENT_PV_ENERGY_OUTPUT,
@@ -87,19 +88,25 @@ class DecisionMaker:
             return actions_taken
         
         # Proceed based on current energy source
-        if household.flag == 1:  # Currently brown electricity
-            actions_taken = self._decide_lce_household(household, utility_calculator)
-        
-        elif household.flag == 0:  # Currently gray electricity
-            actions_taken = self._decide_ff_household(household, utility_calculator)
-        
+        if household.flag == 0:  # Currently gray electricity
+            actions_taken = self._decide_grey_household(household, utility_calculator)
+            print(f"Household {household.h_id} (gray): Actions taken: {actions_taken}")
+            quit()
+
+        elif household.flag == 1:  # Currently brown electricity
+            actions_taken = self.__decide_brown_household(household, utility_calculator)
+            print(f"Household {household.h_id} (brown): Actions taken: {actions_taken}")
+            quit()
+
         elif household.flag == 2:  # Currently green electricity
-            actions_taken = self._decide_slce_household(household, utility_calculator)
+            actions_taken = self._decide_green_household(household, utility_calculator)
+            print(f"Household {household.h_id} (green): Actions taken: {actions_taken}")
+            quit()
         
         return actions_taken
     
-    def _decide_lce_household(self, household, utility_calculator) -> List[bool]:
-        """Make decisions for household on green energy."""
+    def __decide_brown_household(self, household, utility_calculator) -> List[bool]:
+        """Make decisions for household on brown energy."""
         actions = [False, False, False]
         
         # Action 1: Investment (PV)
@@ -142,8 +149,8 @@ class DecisionMaker:
         
         return actions
     
-    def _decide_ff_household(self, household, utility_calculator) -> List[bool]:
-        """Make decisions for household on fossil fuel."""
+    def _decide_grey_household(self, household, utility_calculator) -> List[bool]:
+        """Make decisions for household on grey."""
         actions = [False, False, False]
         
         # Action 1: Investment (PV)
@@ -186,8 +193,8 @@ class DecisionMaker:
         
         return actions
     
-    def _decide_slce_household(self, household, utility_calculator) -> List[bool]:
-        """Make decisions for household already on super-green."""
+    def _decide_green_household(self, household, utility_calculator) -> List[bool]:
+        """Make decisions for household already on green energy."""
         actions = [False, False, False]
         
         # Action 1: Further Investment

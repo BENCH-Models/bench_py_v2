@@ -91,15 +91,15 @@ LEARNING_TYPES = [
 DEFAULT_LEARNING_TYPE = "No learning"
 
 # File Paths (relative to project root)
-DATA_DIR = "netlogo/data"
-HOUSEHOLD_FILE = "netlogo/data/household.csv"
-CGE_NL_CON_FILE = "netlogo/data/cge-nl-ssp2-con.csv"
-CGE_NL_H_FILE = "netlogo/data/cge-nl-ssp2-h.csv"
-CGE_NL_ALPHA_FILE = "netlogo/data/cge-nl-ssp2-alpha.csv"
-PRIMES_NL_PRICES_FILE = "netlogo/data/primes-nl-ref-prices.csv"
-PRIMES_NL_CON_FILE = "netlogo/data/primes-nl-ref-con.csv"
-PRIMES_NL_NONCON_FILE = "netlogo/data/primes-nl-ref-noncon.csv"
-PRIMES_SPN_PRICES_FILE = "netlogo/data/primes-spn-ref-prices.csv"
+DATA_DIR = "data"
+HOUSEHOLD_FILE = "data/household.csv"
+CGE_NL_CON_FILE = "data/cge-nl-ssp2-con.csv"
+CGE_NL_H_FILE = "data/cge-nl-ssp2-h.csv"
+CGE_NL_ALPHA_FILE = "data/cge-nl-ssp2-alpha.csv"
+PRIMES_NL_PRICES_FILE = "data/primes-nl-ref-prices.csv"
+PRIMES_NL_CON_FILE = "data/primes-nl-ref-con.csv"
+PRIMES_NL_NONCON_FILE = "data/primes-nl-ref-noncon.csv"
+PRIMES_SPN_PRICES_FILE = "data/primes-spn-ref-prices.csv"
 
 # Output Configuration
 OUTPUT_DIR = "output"
@@ -109,3 +109,92 @@ OUTPUT_ACTIONS_FILE = "actions_breakdown.csv"
 
 # Normalization Parameters (utilities)
 UTILITY_NORMALIZATION_FACTOR = 0.5  # Alpha parameter for utility calculation
+
+
+MEMORY_RULES = {
+    1: {  # Income group 1
+        1: {  # energy_flag = 1
+            'act11': (0.5714, True),
+            'act31': (0.1428, True),
+            'act32': (0.8572, True),  # Derived from remaining probability (100 - 14.28)
+            'act21': (0.2143, True),
+        },
+        0: {  # energy_flag = 0
+            'act12': (0.5814, True),
+            'act40': (0.0930, True),
+        }
+    },
+    2: {  # Income group 2
+        1: {
+            'act11': (0.7829, True),
+            'act31': (0.1513, True),
+            'act32': (0.8487, True),
+            'act21': (0.1710, True),
+        },
+        0: {
+            'act12': (0.6860, True),
+            'act40': (0.0870, True),
+        }
+    },
+    3: {  # Income group 3
+        1: {
+            'act11': (0.8240, True),
+            'act31': (0.1410, True),
+            'act32': (0.8590, True),
+            'act21': (0.1700, True),
+            'always_act2': (1.0000, True), # Note: Group 3, flag 1 always sets item 2 to 1 unconditionally
+        },
+        0: {
+            'act12': (0.8048, True),
+            'act40': (0.1155, True),
+        }
+    },
+    4: {  # Income group 4
+        1: {
+            'act11': (0.8310, True),
+            'act31': (0.1846, True),
+            'act32': (0.8154, True),
+            'act21': (0.1846, True),
+        },
+        0: {
+            'act12': (0.4286, True),
+            'act40': (0.1600, True),
+        }
+    },
+    5: {  # Income group 5
+        1: {
+            'act11': (0.8847, True),
+            'act31': (0.2310, True),
+            'act32': (0.7690, True),
+            'act21': (0.2310, True),
+        },
+        0: {
+            'act12': (0.8789, True),
+            'act40': (0.1818, True),
+        }
+    },
+    6: {  # Income group 6
+        1: {
+            'always_act11': (1.0000, True), # Note: Group 6, flag 1 always executes action 11
+            'act31': (0.5000, True),
+            'act32': (0.5000, True),
+            'act21': (0.50)
+        },
+        0: {
+            'always_act12': (1.0000, True), # Note: Group 6, flag 0 always executes action 12
+            'act40': (0.2500, True),
+        }
+    },
+    7: {  # Income group 7
+        1: {
+            'act11': (0.6000, True),
+            'act31': (0.2000, True),
+            'act32': (0.8000, True),
+            'act21': (0.2000, True),
+        },
+        0: {
+            'act12': (0.8333, True),
+            'act40': (0.0830, True),
+        }
+    }
+}

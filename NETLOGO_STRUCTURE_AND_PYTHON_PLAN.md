@@ -50,8 +50,6 @@ ESP_pol.*                 - Shapefile data (political boundaries)
    - `normalize-1` - Normalize consumption/income for utilities
    - `utility_exp_NAT` - Calculate expected utility for each action
    - `update_utilities_NAT` - Update utility calculations
-   - `satisfy` - Check satisfaction thresholds
-   - `regret` - Calculate regret (behavioral decision mechanism)
 4. **Actions & Economics:**
    - `action` - Decide and execute household actions
    - `save` - Calculate energy/money savings
@@ -227,7 +225,6 @@ project/
 1. Implement behavioral factors (knowledge, motivation, norms)
 2. Build utility calculation engine
 3. Implement action decision logic
-4. Add regret/satisfaction mechanisms
 
 **Phase 3: Market & Economics**
 1. Implement price setting logic

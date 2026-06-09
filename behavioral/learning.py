@@ -8,13 +8,14 @@ from utils.constants import (
     ACTION_INVESTMENT,
     ACTION_SWITCHING,
     BEHAVIORAL_SCALE_MAX,
+    MEMORY_RULES
 )
 
 
 class LearningMechanism:
     """
     Implements learning and social influence for households.
-    Tracks peer learning, regret, satisfaction, and memory effects.
+    Tracks peer learning and memory effects.
     """
     
     def __init__(self):
@@ -154,49 +155,7 @@ class LearningMechanism:
 
         self._record_learning(source_household, year, source_household.know, source_household.h_aware)
 
-    def update_satisfaction(self, household, year: int) -> None:
-        """
-        Update satisfaction based on action outcomes.
-        
-        Args:
-            household: Household object
-            year: Current simulation year
-        """
-        # Satisfaction improves if actions yielded benefits
-        investment_benefit = household.h_invest_total > 0
-        conservation_benefit = household.h_conserv > 0
-        switching_benefit = household.h_switch > 0
-        
-        satisfaction_change = 0.0
-        if investment_benefit:
-            satisfaction_change += 0.1
-        if conservation_benefit:
-            satisfaction_change += 0.1
-        if switching_benefit:
-            satisfaction_change += 0.1
-        
-        household.satisfaction = min(household.satisfaction + satisfaction_change, 1.0)
-    
-    def update_regret(self, household, market_state: Dict, year: int) -> None:
-        """
-        Update regret based on divergence from optimal decisions.
-        
-        Args:
-            household: Household object
-            market_state: Current market state
-            year: Current simulation year
-        """
-        # Regret if prices diverged unfavorably
-        price_changes = market_state.get('price_changes', {})
-        
-        for i, (old_price, new_price) in price_changes.items():
-            if old_price > new_price:
-                # Prices dropped - regret for not switching earlier
-                household.regret[i] = min(household.regret[i] + 0.05, 1.0)
-            elif old_price < new_price:
-                # Prices increased - no regret, decision was good
-                household.regret[i] = max(household.regret[i] - 0.05, 0.0)
-    
+
     def recall_memory(self, household, initial_actions: Dict, 
                      income_group: int, energy_flag: int,
                      case_study: str) -> None:
@@ -214,31 +173,18 @@ class LearningMechanism:
             case_study: "Netherlands-Overijssel" or "Spain-Navarre"
         """
         if case_study != "Netherlands-Overijssel":
+            print(f"Memory recall only implemented for Netherlands-Overijssel. Skipping for {case_study}.")
             return  # Only apply to Netherlands for now
         
         # Memory recall rules (from NetLogo recallmemory procedure)
         # Different probabilities for different income groups and energy sources
         
-        memory_rules = {
-            1: {  # Income group 1
-                1: {  # LCE users: 57.14% did investment
-                    'act11': (0.5714, True),
-                    'act31': (0.1428, True),
-                    'act32': (0.8572, True),
-                    'act21': (0.2143, True),
-                },
-                0: {  # FF users: 58.14% did investment
-                    'act12': (0.5814, True),
-                    'act40': (0.0930, True),
-                }
-            },
-            # Add more groups as needed...
-        }
+
+        if income_group not in MEMORY_RULES:
+            print(f"Warning: No memory rules for income group {income_group}")
+            return 
         
-        if income_group not in memory_rules:
-            return
-        
-        rules = memory_rules[income_group].get(energy_flag, {})
+        rules = MEMORY_RULES[income_group].get(energy_flag, {})
         
         for action_name, (probability, value) in rules.items():
             if random.random() < probability:

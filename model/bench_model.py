@@ -347,8 +347,6 @@ class BENCHModel:
             )
             
             self.learning_mechanism.learn_from_peers(household, neighbors, self.year)
-            self.learning_mechanism.update_satisfaction(household, self.year)
-            self.learning_mechanism.update_regret(household, {}, self.year)
     
     def _apply_social_learning(self) -> None:
         """Apply the selected learning algorithm to households after 2015."""
@@ -369,8 +367,6 @@ class BENCHModel:
             self.year,
             self.learning_type
         )
-        self.learning_mechanism.update_satisfaction(household, self.year)
-        self.learning_mechanism.update_regret(household, {}, self.year)
 
     def run(self, verbose: bool = True) -> bool:
         """

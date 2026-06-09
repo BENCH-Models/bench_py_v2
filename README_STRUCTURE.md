@@ -120,9 +120,6 @@ Social learning mechanisms:
 - **learn_from_peers()**: Influence from neighboring households
 - **recall_memory()**: 2015 historical behavior initialization
 - **update_memory()**: Store year experiences
-- **update_satisfaction()**: Feedback from action outcomes
-- **update_regret()**: Response to price changes
-- **get_network_effect()**: Quantify peer influence
 
 #### `utils/constants.py`
 All global parameters:
