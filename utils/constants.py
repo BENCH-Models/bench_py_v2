@@ -76,6 +76,12 @@ POLICIES = [
     "Carbon price pressure-2020"
 ]
 
+# Emission factors by electricity source
+EMISSIONS_FACTOR_FF = 0.9   # kg CO2 per kWh for coal
+EMISSIONS_FACTOR_FF = 0.3   # kg CO2 per kWh for natural gas
+EMISSIONS_FACTOR_LCE = 0.0  # kg CO2 per kWh for low-carbon electricity
+EMISSIONS_FACTOR_SLCE = 0.0 # kg CO2 per kWh for super-low-carbon electricity
+
 LEARNING_TYPES = [
     "No learning",
     "Fast adaptation",

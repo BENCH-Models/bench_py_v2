@@ -1,0 +1,26 @@
+# BENCH model paper resutls considered - Table  1 - Assessing the macroeconomic impacts of individual behavioral changes on carbon emissions
+# Each entry runs a separate configuration in sequence.
+
+- case_study: Netherlands-Overijssel
+  scenario: Ref_SSP2
+  policy: Ref
+  learning_type: Slow adaptation
+  run_label: SD
+
+- case_study: Netherlands-Overijssel
+  scenario: Ref_SSP2
+  policy: Ref
+  learning_type: Fast adaptation
+  run_label: FD
+
+- case_study: Netherlands-Overijssel
+  scenario: Ref_SSP2
+  policy: Carbon price pressure-25
+  learning_type: Slow adaptation
+  run_label: SDC
+
+- case_study: Netherlands-Overijssel
+  scenario: Ref_SSP2
+  policy: Carbon price pressure-25
+  learning_type: Fast adaptation
+  run_label: FDC

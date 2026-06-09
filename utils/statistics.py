@@ -3,7 +3,13 @@ Statistics aggregation for BENCH model outputs
 """
 
 from typing import Dict, List, Tuple
-from utils.constants import FLAG_NAMES, DWELLING_LABEL_NAMES
+from utils.constants import (
+    FLAG_NAMES,
+    DWELLING_LABEL_NAMES,
+    EMISSIONS_FACTOR_FF,
+    EMISSIONS_FACTOR_LCE,
+    EMISSIONS_FACTOR_SLCE,
+)
 
 
 class StatisticsAggregator:
@@ -51,6 +57,14 @@ class StatisticsAggregator:
         
         # === EMISSIONS ===
         total_emissions_avoided = sum(sum(hh.em_avoided) for hh in households)
+        total_emissions = 0.0
+        for hh in households:
+            if hh.flag == 0:
+                total_emissions += hh.h_q * EMISSIONS_FACTOR_FF
+            elif hh.flag == 1:
+                total_emissions += hh.h_q * EMISSIONS_FACTOR_LCE
+            elif hh.flag == 2:
+                total_emissions += hh.h_q * EMISSIONS_FACTOR_SLCE
         
         # === BEHAVIORAL METRICS ===
         avg_awareness = sum(hh.h_aware for hh in households) / n_households if n_households > 0 else 0
@@ -86,6 +100,11 @@ class StatisticsAggregator:
             # Environmental
             'total_emissions_avoided_kg_co2': total_emissions_avoided,
             'emissions_avoided_per_capita': total_emissions_avoided / n_households if n_households > 0 else 0,
+            'total_emissions_kg_co2': total_emissions,
+            'total_emissions_tons_co2': total_emissions / 1000.0,
+            'emissions_per_capita_kg_co2': total_emissions / n_households if n_households > 0 else 0,
+            'emissions_per_capita_tons': (total_emissions / n_households / 1000.0) if n_households > 0 else 0,
+            'co2_emitted_tons_per_capita': (total_emissions / n_households / 1000.0) if n_households > 0 else 0,
             
             # Behavioral
             'avg_awareness': avg_awareness,

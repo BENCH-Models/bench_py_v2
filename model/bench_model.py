@@ -37,7 +37,9 @@ class BENCHModel:
     
     def __init__(self, case_study: str, scenario: str, policy: str,
                  learning_type: str = DEFAULT_LEARNING_TYPE,
-                 base_path: str = "."):
+                 run_label: str = None,
+                 base_path: str = ".",
+                 output_root: str = None):
         """
         Initialize BENCH model.
         
@@ -46,20 +48,25 @@ class BENCHModel:
             scenario: "Ref_SSP2"
             policy: Price scenario policy
             learning_type: One of the supported learning modes
+            run_label: Optional label used to make run IDs readable
             base_path: Path to project root
+            output_root: Optional root directory for output folders
         """
         self.case_study = case_study
         self.scenario = scenario
         self.policy = policy
         self.learning_type = learning_type
+        self.run_label = run_label
         self.base_path = base_path
+        self.output_root = output_root or os.path.join(self.base_path, OUTPUT_DIR)
         self.run_id = self._generate_run_id()
-        self.run_output_dir = os.path.join(self.base_path, OUTPUT_DIR, self.run_id)
+        self.run_output_dir = os.path.join(self.output_root, self.run_id)
         self.run_config = {
             'case_study': self.case_study,
             'scenario': self.scenario,
             'policy': self.policy,
             'learning_type': self.learning_type,
+            'run_label': self.run_label,
             'run_id': self.run_id,
             'start_year': MODEL_START_YEAR,
             'end_year': MODEL_END_YEAR,
@@ -114,8 +121,8 @@ class BENCHModel:
             return False
         
         # Print summary
-        self.data_loader.print_summary()
-        self._print_agent_summary()
+        #self.data_loader.print_summary()
+        #self._print_agent_summary()
         
         return True
     
@@ -128,7 +135,11 @@ class BENCHModel:
         case_slug = self._sanitize_string(self.case_study)
         scenario_slug = self._sanitize_string(self.scenario)
         policy_slug = self._sanitize_string(self.policy)
-        return f"{timestamp}_{case_slug}_{scenario_slug}_{policy_slug}"
+        label_slug = self._sanitize_string(self.run_label) if self.run_label else None
+        parts = [timestamp, case_slug, scenario_slug, policy_slug]
+        if label_slug:
+            parts.append(label_slug)
+        return "_".join(parts)
 
     def _create_agents(self) -> bool:
         """

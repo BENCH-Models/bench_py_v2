@@ -36,13 +36,13 @@ class ResultsExporter:
         """Create output directory if it doesn't exist."""
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
-            print(f"Created output directory: {self.output_dir}")
+            #print(f"Created output directory: {self.output_dir}")
     
     def ensure_plots_dir(self) -> None:
         """Create plots directory inside the run output folder."""
         if not os.path.exists(self.plots_dir):
             os.makedirs(self.plots_dir)
-            print(f"Created plots directory: {self.plots_dir}")
+            #print(f"Created plots directory: {self.plots_dir}")
     
     def export_annual_aggregates(self, stats_aggregator, 
                                 start_year: int, end_year: int,

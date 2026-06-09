@@ -44,23 +44,23 @@ class DataLoader:
             True if all files loaded successfully, False otherwise
         """
         try:
-            print("Loading BENCH model data...")
+            #print("Loading BENCH model data...")
             
             # Load household data
             self.load_households()
-            print(f"✓ Loaded {len(self.households_df)} households")
+            #print(f"✓ Loaded {len(self.households_df)} households")
             
             # Load price scenarios
             self.load_prices()
-            print(f"✓ Loaded price scenarios")
+            #print(f"✓ Loaded price scenarios")
             
             # Load consumption parameters
             self.load_consumption_data()
-            print(f"✓ Loaded consumption data")
+            #print(f"✓ Loaded consumption data")
             
             # Load CGE parameters
             self.load_cge_data()
-            print(f"✓ Loaded CGE parameters")
+            #print(f"✓ Loaded CGE parameters")
             
             return True
             
