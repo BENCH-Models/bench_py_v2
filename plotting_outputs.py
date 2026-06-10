@@ -117,7 +117,9 @@ def plot_batch_comparison(batch_data: List[Tuple[str, List[pd.DataFrame]]],
     """Plots averaged metrics across configurations equipped with shaded 95% Confidence Intervals."""
     plt.figure(figsize=(11, 6.5))
     plotted = False
-    
+
+    print("Plot: ",title)
+
     for label, dfs in batch_data:
         combined_matrix = []
         x_values = None
@@ -138,6 +140,9 @@ def plot_batch_comparison(batch_data: List[Tuple[str, List[pd.DataFrame]]],
         
         mean_line = np.mean(data_matrix, axis=0)
         line, = plt.plot(x_values, mean_line, label=f"{label} (N={n_samples})", marker='o', linewidth=2, markersize=4)
+
+        print(mean_line)
+        
         color = line.get_color()
         plotted = True
         
@@ -195,7 +200,6 @@ def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
         'action_1_count',
         'action_2_count',
         'action_3_count',
-        'total_emissions_avoided_kg_co2',
         'total_energy_saved_kwh',
         'co2_emitted_tons_per_capita',
         'emissions_avoided_tons_per_capita'

@@ -57,6 +57,10 @@ class Household:
         self.h_age = kwargs.get('h_age')
         self.owner = owner
         
+        # --- NEW ATTRIBUTE: Multi-year income tracking ---
+        # Defaults to mapping the base year to the provided income if not passed explicitly via kwargs
+        self.income_trajectory = kwargs.get('income_trajectory', {2015: income})
+        
         # === DWELLING ===
         self.dw_el = dwelling_label  # 1-6 (A-F equivalent)
         self.dw_st = kwargs.get('dw_st')  # Dwelling structure type
@@ -173,6 +177,15 @@ class Household:
             'influence_su': 0.0,
         }
         self.experience = {}  # Track past experiences
+
+
+    def set_income_for_year(self, year: int) -> None:
+        """
+        Updates the active annual income using the time series trajectory.
+        If data for the specific year is missing, it preserves the current income as a fallback.
+        """
+        if self.income_trajectory and year in self.income_trajectory:
+            self.h_income = float(self.income_trajectory[year])
         
     def update_awareness(self) -> None:
         """Calculate average awareness from components."""
@@ -259,51 +272,54 @@ class Household:
             self.delta[action_type] = 0.7
     
     def calculate_budgets(self, prices: Dict[str, float]) -> None:
-        """
-        Calculate discretionary income (z) for different scenarios.
-        
-        Args:
-            prices: Dictionary with keys 'm_p_grey', 'm_p_brown', 'm_p_green'
-        """
-        if self.h_q <= 0:
-            return
-        
-        m_p_grey = prices.get('m_p_grey')
-        m_p_brown = prices.get('m_p_brown')
-        m_p_green = prices.get('m_p_green')
-        
-        # Scenario 1: No action (baseline consumption)
-        base_fixed = 1700 * m_p_brown + 487.59  # Fixed costs 
-        #1700 is based on http://www.theecoexperts.co.uk/how-much-electricity-does-average-solar-panel-system-generate and 2KW size
-        
-        self.z_brown[0] = self.h_income - ((self.h_q * m_p_brown) + base_fixed + 
-                                          self.h_conserv_p + self.h_switch)
-        self.z_grey[0] = self.h_income - ((self.h_q * m_p_grey) + base_fixed + 
-                                         self.h_conserv_p + self.h_switch)
-        self.z_green[0] = self.h_income - ((self.h_q * m_p_green) + base_fixed + 
-                                           self.h_conserv_p + self.h_switch)
-        
-        # Scenario 2: After investment
-        self.z_brown[1] = self.h_income - ((self.h_q * m_p_brown) + self.h_invest_save * m_p_brown + 
-                                          self.h_invest + (0.5 * self.h_q * m_p_brown) + self.h_switch)
-        self.z_grey[1] = self.h_income - ((self.h_q * m_p_grey) + self.h_invest_save * m_p_grey + 
-                                         self.h_invest + (0.5 * self.h_q * m_p_grey) + self.h_switch)
-        self.z_green[1] = self.h_income - ((self.h_q * m_p_green) + self.h_invest_save * m_p_green + 
-                                           self.h_invest + (0.5 * self.h_q * m_p_green) + self.h_switch)
-        
-        # Scenario 3: Complex switching scenarios
-        self.z_brown[2] = self.h_income - ((self.h_q * m_p_green) + 
-                                          self.h_invest_save * m_p_green + self.h_invest + 
-                                          self.h_conserv_p + (m_p_green - m_p_brown))
-        self.z_grey[2] = self.h_income - ((self.h_q * m_p_brown) + 
-                                         self.h_invest_save * m_p_brown + self.h_invest + 
-                                         self.h_conserv_p + (m_p_brown - m_p_grey))
-        
-        # Check for low-paid status
-        if (self.z_grey[0] < 0 or self.z_grey[1] < 0 or self.z_brown[0] < 0 or 
-            self.z_brown[1] < 0 or self.z_green[0] < 0):
-            self.hh_sta = "Low-paid"
-    
+            """
+            Calculate discretionary income (z) for different scenarios matching NetLogo exactly.
+            Grey = Fossil Fuels (ff)
+            Brown = Low Carbon Electricity (lce)
+            Green = Super Green (zero)
+            """
+            if self.h_q <= 0:
+                return
+                
+            # Reset household state every single step so income trajectories can recover agents
+            self.hh_sta = "Normal"
+            
+            # Match your clean price variables
+            m_p_grey = prices.get('m_p_grey', 0.0)
+            m_p_brown = prices.get('m_p_brown', 0.0)
+            m_p_green = prices.get('m_p_green', 0.0)
+            
+            # Household parameters
+            h_q = self.h_q
+            h_income = self.h_income
+            h_conserv_p = self.h_conserv_p
+            h_switch = self.h_switch
+            h_invest = self.h_invest
+            h_invest_save = self.h_invest_save 
+
+            # --- EXACT NETLOGO FORMULAS WITH COLOR VARIABLE NAMES ---
+            # Scenario 1: Conservation Path (1700 kWh penalty overhead baseline)
+            self.z_brown1 = h_income - ((h_q * m_p_brown) + (1700 * m_p_brown) + 487.59 + h_conserv_p + h_switch)
+            self.z_grey1  = h_income - ((h_q * m_p_grey) + (1700 * m_p_grey) + 487.59 + h_conserv_p + h_switch)
+            self.z_green1 = h_income - ((h_q * m_p_green) + (1700 * m_p_green) + 487.59 + h_conserv_p + h_switch)
+
+            # Scenario 2: Investment Path (Subtracts investment costs, reduces consumption by half)
+            self.z_brown2 = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_brown) + h_invest + ((0.5 * h_q) * m_p_brown) + h_switch)
+            self.z_grey2  = h_income - ((h_q * m_p_grey) + (h_invest_save * m_p_grey) + h_invest + ((0.5 * h_q) * m_p_grey) + h_switch)
+            self.z_green2 = h_income - ((h_q * m_p_green) + (h_invest_save * m_p_green) + h_invest + (0.5 * h_q) + h_switch)
+            
+            # Scenario 3: Switching Path (Includes the specific fuel tariff switching penalty adjustments)
+            self.z_brown3 = h_income - ((h_q * m_p_green) + (h_invest_save * m_p_green) + h_invest + h_conserv_p + (m_p_green - m_p_brown))
+            self.z_grey3  = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_brown) + h_invest + h_conserv_p + (m_p_brown - m_p_grey))
+
+            # Apply low-income safety limits from NetLogo using your explicit variable names
+            if self.z_grey1 < 0 or self.z_grey2 < 0:
+                self.hh_sta = "Low-paid1"
+            elif self.z_brown1 < 0 or self.z_brown2 < 0 or self.z_brown3 < 0:
+                self.hh_sta = "Low-paid1"
+            elif self.z_green1 < 0 or self.z_green2 < 0:
+                self.hh_sta = "Low-paid1"
+                
     def get_action_status(self) -> Dict[str, bool]:
         """Return current action status as dictionary."""
         return {

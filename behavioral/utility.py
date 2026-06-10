@@ -20,72 +20,108 @@ class UtilityCalculator:
         self.z_max = {}
     
     def normalize_budgets(self, households: List) -> None:
-        """
-        Scans the entire population to find the absolute maximum raw Z values
-        across all 3 action types. Should be called ONCE per step.
-        """
-        z_brown_max = [0.0, 0.0, 0.0]
-        z_grey_max = [0.0, 0.0, 0.0]
-        z_green_max = [0.0, 0.0, 0.0]
-        
-        for hh in households:
-            for i in range(3):
-                z_brown_max[i] = max(z_brown_max[i], hh.z_brown[i])
-                z_grey_max[i] = max(z_grey_max[i], hh.z_grey[i])
-                z_green_max[i] = max(z_green_max[i], hh.z_green[i])
-        
-        self.z_max = {
-            'z_brown': z_brown_max,
-            'z_grey': z_grey_max,
-            'z_green': z_green_max
-        }
+            """
+            Finds the maximum values for each color variable across the entire population.
+            """
+            # Track separate global maximums
+            max_grey1 = max_grey2 = max_grey3 = 1.0
+            max_brown1 = max_brown2 = max_brown3 = 1.0
+            max_green1 = max_green2 = 1.0
+            
+            for hh in households:
+                max_brown1 = max(max_brown1, getattr(hh, 'z_brown1'))
+                max_brown2 = max(max_brown2, getattr(hh, 'z_brown2'))
+                max_brown3 = max(max_brown3, getattr(hh, 'z_brown3'))
+                
+                max_grey1  = max(max_grey1, getattr(hh, 'z_grey1'))
+                max_grey2  = max(max_grey2, getattr(hh, 'z_grey2'))
+                max_grey3  = max(max_grey3, getattr(hh, 'z_grey3'))
+                
+                max_green1 = max(max_green1, getattr(hh, 'z_green1'))
+                max_green2 = max(max_green2, getattr(hh, 'z_green2'))
+
+            # Assign normalized variables directly back to the agents
+            for hh in households:
+                hh.z_brown1_norm = hh.z_brown1 / max_brown1 if max_brown1 > 0 else 1.0
+                hh.z_brown2_norm = hh.z_brown2 / max_brown2 if max_brown2 > 0 else 1.0
+                hh.z_brown3_norm = hh.z_brown3 / max_brown3 if max_brown3 > 0 else 1.0
+                
+                hh.z_grey1_norm  = hh.z_grey1 / max_grey1 if max_grey1 > 0 else 1.0
+                hh.z_grey2_norm  = hh.z_grey2 / max_grey2 if max_grey2 > 0 else 1.0
+                hh.z_grey3_norm  = hh.z_grey3 / max_grey3 if max_grey3 > 0 else 1.0
+                
+                hh.z_green1_norm = hh.z_green1 / max_green1 if max_green1 > 0 else 1.0
+                hh.z_green2_norm = hh.z_green2 / max_green2 if max_green2 > 0 else 1.0
 
     def normalize_budget_values(self, household) -> None:
-        """
-        Normalizes a single household's raw Z values against the global population maximums.
-        """
-        z_brown_max = self.z_max.get('z_brown', [1.0, 1.0, 1.0])
-        z_grey_max = self.z_max.get('z_grey', [1.0, 1.0, 1.0])
-        z_green_max = self.z_max.get('z_green', [1.0, 1.0, 1.0])
-        
-        # Guard clause: Ensure target normalization tracking lists exist on the agent
-        for attr in ['z_brown_norm', 'z_grey_norm', 'z_green_norm']:
-            if not hasattr(household, attr) or not getattr(household, attr):
-                setattr(household, attr, [0.0, 0.0, 0.0])
+            """
+            Normalizes a single household's raw Z values against the global population maximums.
+            """
+            # Safely fetch the 3-slot list of maximum values from the dictionary, falling back to 1.0s
+            z_brown_max = self.z_max.get('z_brown', [1.0, 1.0, 1.0])
+            z_grey_max = self.z_max.get('z_grey', [1.0, 1.0, 1.0])
+            z_green_max = self.z_max.get('z_green', [1.0, 1.0, 1.0])
 
-        for i in range(3):
-            household.z_brown_norm[i] = (household.z_brown[i] / z_brown_max[i]) if z_brown_max[i] > 0 else 0.0
-            household.z_grey_norm[i] = (household.z_grey[i] / z_grey_max[i]) if z_grey_max[i] > 0 else 0.0
-            household.z_green_norm[i] = (household.z_green[i] / z_green_max[i]) if z_green_max[i] > 0 else 0.0
+            # Safely loop through all 3 index slots (0 = Investment, 1 = Conservation, 2 = Switching)
+            for i in range(3):
+                # Guard against division by zero by checking if the specific slot maximum is greater than 0
+                household.z_brown_norm[i] = (household.z_brown[i] / z_brown_max[i]) if z_brown_max[i] > 0 else 0.0
+                household.z_grey_norm[i] = (household.z_grey[i] / z_grey_max[i]) if z_grey_max[i] > 0 else 0.0
+                household.z_green_norm[i] = (household.z_green[i] / z_green_max[i]) if z_green_max[i] > 0 else 0.0
     
-    def calculate_expected_utility(self, household, energy_source: int, 
-                                   action_type: int, market_state: Dict) -> float:
-        """
-        Calculates the explicit expected utility score for an isolated scenario route.
-        """
-        # Select appropriate normalized budget constraint
-        if energy_source == 0:    # GREY
-            z_norm = household.z_grey_norm[action_type]
-        elif energy_source == 1:  # BROWN
-            z_norm = household.z_brown_norm[action_type]
-        else:                     # GREEN
-            z_norm = household.z_green_norm[action_type]
-        
-        # Resolve environmental preference parameters dynamically from agent profiles if present
-        e_norm = getattr(household, 'e_norm', 0.3 if energy_source == 0 else 0.7)
-        
-        # Extract behavioral components
-        delta = household.delta[action_type]
-        K = household.K
-        M = household.M[action_type]
-        pbc_norm = household.pbc[action_type] / BEHAVIORAL_SCALE_MAX
-        
-        # Functional Utility Formula Calculation
-        consumption_utility = (z_norm * (1 - ALPHA)) + (e_norm * ALPHA)
-        behavioral_utility = K + M + pbc_norm
-        
-        return (consumption_utility * (1 - delta)) + (behavioral_utility * delta)
-    
+    def calculate_expected_utility(self, household, energy_source: int, action_type: int, market_state: dict) -> float:
+            """
+            Calculates utility matching NetLogo structures exactly.
+            household.flag: 0 = Grey (FF), 1 = Brown (LCE), 2 = Green (Zero)
+            action_type: 0 = Investment, 1 = Conservation, 2 = Switching
+            """
+            K = household.K
+            alpha = market_state.get('alpha', 0.1)
+            
+            M = household.M[action_type]
+            delta = household.delta[action_type]
+            pbc = household.pbc[action_type]
+            
+            # Base consumption metric (e_norm)
+            e_norm = household.h_q / max(1.0, household.h_q) 
+
+            
+            # Map the calculation paths directly to your explicit color variable names
+            if household.flag == 1:   # Brown User Path (LCE)
+                if action_type == 0:    # Investment
+                    z_norm = getattr(household, 'z_brown1_norm', 1.0)
+                elif action_type == 1:  # Conservation
+                    z_norm = getattr(household, 'z_brown2_norm', 1.0)
+                elif action_type == 2:  # Switching
+                    z_norm = getattr(household, 'z_brown3_norm', 1.0)
+                    
+            elif household.flag == 0: # Grey User Path (FF)
+                if action_type == 0:    # Investment
+                    z_norm = getattr(household, 'z_grey1_norm', 1.0)
+                elif action_type == 1:  # Conservation
+                    z_norm = getattr(household, 'z_grey2_norm', 1.0)
+                elif action_type == 2:  # Switching
+                    z_norm = getattr(household, 'z_grey3_norm', 1.0)
+                    
+            elif household.flag == 2:  # Green User Path (Super Green / zero)
+                        if action_type == 0:    # Investment (zero1)
+                            z_norm = getattr(household, 'z_green1_norm', 1.0)
+                        elif action_type == 1:  # Conservation (zero2)
+                            z_norm = getattr(household, 'z_green2_norm', 1.0)
+                        elif action_type == 2:  # Switching (Not allowed for green agents!)
+                            # Return 0.0 utility because they are already at the peak green tier 
+                            # and cannot switch away to grey or brown.
+                            return 0.0
+
+            
+
+            if delta == 0:
+                return 0.0
+
+            # Exact formula from NetLogo utility_exp_NAT:
+            utility = (((z_norm * (1 - alpha)) + (e_norm * alpha)) * (1 - delta)) + ((K + M + (pbc / 7.0)) * delta)
+            return utility
+
     def calculate_all_utilities(self, household, market_state: Dict) -> None:
         """
         Loops through all possible configurations to update the household's expected utility arrays.

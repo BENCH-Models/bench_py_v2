@@ -364,9 +364,13 @@ class BENCHModel:
                 self._recall_memory()
             
             self._update_prices()
+
             
             # --- PASS 1: Update individual attributes and raw budgets ---
             for household in self.households:
+
+                household.set_income_for_year(self.year)#update income of the household based on its trajectory
+
                 self.decision_maker.activate_knowledge(household, self.case_study)
                 self.decision_maker.update_motivation(household, self.case_study)
                 
@@ -442,8 +446,6 @@ class BENCHModel:
             carbon_tax_per_kwh_grey = tax_per_kg * EMISSIONS_FACTOR_GRAY
             carbon_tax_per_kwh_brown = tax_per_kg * EMISSIONS_FACTOR_BROWN
 
-
-        
         # 3. Apply final calculated values to the active price variables
         self.prices['m_p_grey'] = M_P_GREY_BASE + carbon_tax_per_kwh_grey
         self.prices['m_p_brown'] = M_P_BROWN_BASE + carbon_tax_per_kwh_brown
