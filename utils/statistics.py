@@ -56,7 +56,9 @@ class StatisticsAggregator:
         total_switching_benefit = sum(hh.h_switch for hh in households)
         
         # === EMISSIONS ===
-        total_emissions_avoided = sum(sum(hh.em_avoided) for hh in households)
+        # FIX: Use .values() for dictionary
+        total_emissions_avoided = sum(sum(hh.em_avoided.values()) for hh in households)
+        
         total_emissions = 0.0
         for hh in households:
             if hh.flag == 0:
@@ -69,7 +71,7 @@ class StatisticsAggregator:
         # === BEHAVIORAL METRICS ===
         avg_awareness = sum(hh.h_aware for hh in households) / n_households if n_households > 0 else 0
         high_guilt_count = sum(1 for hh in households if hh.guilt == 'H')
-        avg_motivation = sum(sum(hh.h_motiv) / 3 for hh in households) / n_households if n_households > 0 else 0
+        avg_motivation = sum(sum(hh.h_motiv.values()) / 3 for hh in households) / n_households if n_households > 0 else 0
         
         stats = {
             'year': year,
@@ -143,7 +145,8 @@ class StatisticsAggregator:
                 'action_2_count': sum(1 for hh in group_hhs if hh.act2),
                 'action_3_count': sum(1 for hh in group_hhs if hh.act3),
                 'total_investment': sum(hh.h_invest for hh in group_hhs),
-                'total_emissions_avoided': sum(sum(hh.em_avoided) for hh in group_hhs),
+                # FIX: Use .values() for dictionary
+                'total_emissions_avoided': sum(sum(hh.em_avoided.values()) for hh in group_hhs),
                 'avg_awareness': sum(hh.h_aware for hh in group_hhs) / len(group_hhs),
             }
             
@@ -212,11 +215,11 @@ class StatisticsAggregator:
         for year in range(start_year, end_year + 1):
             if year in self.annual_stats:
                 stats = self.annual_stats[year]
-                cumulative['total_investment'] += stats.get('total_investment')
-                cumulative['total_energy_saved'] += stats.get('total_energy_saved_kwh')
-                cumulative['total_emissions_avoided'] += stats.get('total_emissions_avoided_kg_co2')
-                cumulative['total_conservation_savings'] += stats.get('total_conservation_savings_money')
-                cumulative['actions_cumulative'] += stats.get('action_total_count')
+                cumulative['total_investment'] += stats.get('total_investment', 0)
+                cumulative['total_energy_saved'] += stats.get('total_energy_saved_kwh', 0)
+                cumulative['total_emissions_avoided'] += stats.get('total_emissions_avoided_kg_co2', 0)
+                cumulative['total_conservation_savings'] += stats.get('total_conservation_savings_money', 0)
+                cumulative['actions_cumulative'] += stats.get('action_total_count', 0)
         
         return cumulative
     
@@ -237,7 +240,7 @@ class StatisticsAggregator:
         
         for year in range(start_year, end_year + 1):
             if year in self.annual_stats:
-                value = self.annual_stats[year].get(variable)
+                value = self.annual_stats[year].get(variable, 0)
                 trajectory.append((year, value))
         
         return trajectory

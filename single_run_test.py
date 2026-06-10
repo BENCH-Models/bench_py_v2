@@ -91,7 +91,7 @@ def run_single_test():
         model.export_results()
         
         print("\n✓ Simulation completed successfully!")
-        print(f"  Results saved to: {model.output_dir}")
+
         
         return True
         

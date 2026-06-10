@@ -7,7 +7,6 @@ from typing import Dict, List, Tuple
 import random
 from agents import household
 from utils.constants import (
-    ACTION_INVESTMENT, ACTION_CONSERVATION, ACTION_SWITCHING,
     INVESTMENT_PV_ANNUAL_COST, INVESTMENT_PV_ENERGY_OUTPUT,
     CONSERVATION_RATE, GUILT_HIGH, GUILT_LOW,
     BEHAVIORAL_SCALE_MAX
@@ -53,170 +52,117 @@ class DecisionMaker:
         """
         household.update_motivation(case_study)
     
-    def consider_action(self, household, action_type: int) -> None:
+    def consider_action(self, household, action_name: str) -> None:
         """
         Apply consideration logic based on PBC and constraints.
         
-        Sets delta (adjustment factor) and consideration level.
-        
         Args:
             household: Household object
-            action_type: 0=Investment, 1=Conservation, 2=Switching
+            action_name: 'investment', 'conservation', or 'switching'
         """
-        household.consider_constraints(action_type)
+        household.consider_constraints(action_name)
+
     
-    def decide_action(self, household, market_state: Dict,
-                     utility_calculator) -> List[bool]:
+    def decide_action(self, household, market_state: Dict, utility_calculator) -> List[bool]:
         """
         Make action decision based on utilities and thresholds.
-        
-        Args:
-            household: Household object
-            market_state: Current market conditions
-            utility_calculator: UtilityCalculator instance
-            
-        Returns:
-            List of [action1_taken, action2_taken, action3_taken]
+        Uses dictionary-based utility access.
         """
         actions_taken = [False, False, False]
         
-        # Skip if no consumption or already took all actions
         if household.h_q <= 0:
             return actions_taken
         
-        if all(household.hh_actions):  # All actions taken
-            return actions_taken
+        if household.flag == 1:  # Brown user
+            # Get utilities for brown user
+            exp_utils = household.utility_exp['brown']
+            actual_utils = household.utility_actual['brown']
+            
+            # Find max expected utility
+            max_util = max(exp_utils.values())
+            
+            # Action 1: Investment
+            if not household.act11:
+                if exp_utils['investment'] >= max_util and exp_utils['investment'] >= actual_utils['investment']:
+                    household.act1 = True
+                    household.act11 = True
+                    household.hh_actions[0] = 1
+                    actions_taken[0] = True
+            
+            # Action 2: Conservation
+            if not household.act21:
+                if exp_utils['conservation'] >= max_util and exp_utils['conservation'] >= actual_utils['conservation']:
+                    household.act2 = True
+                    household.act21 = True
+                    household.act50 = True
+                    household.hh_actions[2] = 1
+                    actions_taken[1] = True
+            
+            # Action 3: Switching to green
+            if not (household.act31 or household.act32):
+                if exp_utils['switching'] >= max_util and exp_utils['switching'] >= actual_utils['switching']:
+                    household.act3 = True
+                    household.act31 = True
+                    household.flag = 2
+                    household.hh_actions[4] = 1
+                    actions_taken[2] = True
         
-        # Proceed based on current energy source
-        if household.flag == 0:  # Currently gray electricity
-            actions_taken = self._decide_grey_household(household, utility_calculator)
-
-        elif household.flag == 1:  # Currently brown electricity
-            actions_taken = self.__decide_brown_household(household, utility_calculator)
-
-        elif household.flag == 2:  # Currently green electricity
-            actions_taken = self._decide_green_household(household, utility_calculator)
+        elif household.flag == 0:  # Grey user
+            exp_utils = household.utility_exp['grey']
+            actual_utils = household.utility_actual['grey']
+            
+            max_util = max(exp_utils.values())
+            
+            # Action 1: Investment
+            if not household.act12:
+                if exp_utils['investment'] >= max_util and exp_utils['investment'] >= actual_utils['investment']:
+                    household.act1 = True
+                    household.act12 = True
+                    household.hh_actions[1] = 1
+                    actions_taken[0] = True
+            
+            # Action 2: Conservation
+            if not household.act40:
+                if exp_utils['conservation'] >= max_util and exp_utils['conservation'] >= actual_utils['conservation']:
+                    household.act2 = True
+                    household.act50 = True
+                    household.act40 = True
+                    household.hh_actions[3] = 1
+                    actions_taken[1] = True
+            
+            # Action 3: Switching to brown
+            if not household.act32:
+                if exp_utils['switching'] >= max_util and exp_utils['switching'] >= actual_utils['switching']:
+                    household.act3 = True
+                    household.act32 = True
+                    household.flag = 1
+                    household.hh_actions[5] = 1
+                    actions_taken[2] = True
+        
+        elif household.flag == 2:  # Green user
+            exp_utils = household.utility_exp['green']
+            actual_utils = household.utility_actual['green']
+            
+            max_util = max(exp_utils['investment'], exp_utils['conservation'])
+            
+            # Action 1: Investment
+            if not household.act11:
+                if exp_utils['investment'] >= max_util and exp_utils['investment'] >= actual_utils['investment']:
+                    household.act1 = True
+                    household.act11 = True
+                    household.hh_actions[0] = 1
+                    actions_taken[0] = True
+            
+            # Action 2: Conservation
+            if not household.act21:
+                if exp_utils['conservation'] >= max_util and exp_utils['conservation'] >= actual_utils['conservation']:
+                    household.act2 = True
+                    household.act21 = True
+                    household.hh_actions[2] = 1
+                    actions_taken[1] = True
         
         return actions_taken
-    
-    def __decide_brown_household(self, household, utility_calculator) -> List[bool]:
-        """Make decisions for household on brown energy."""
-        actions = [False, False, False]
-        
-        # Action 1: Investment (PV)
-        if not household.act11:
-            if (household.utility_exp_brown[0] >= max(
-                household.utility_exp_brown[0],
-                household.utility_exp_brown[1],
-                household.utility_exp_brown[2]
-            ) and household.utility_exp_brown[0] >= household.utility_brown[0]):
-                household.act1 = True
-                household.act11 = True
-                household.hh_actions[0] = 1
-                actions[0] = True
-        
-        # Action 2: Conservation
-        if not household.act21:
-            if (household.utility_exp_brown[1] >= max(
-                household.utility_exp_brown[0],
-                household.utility_exp_brown[1],
-                household.utility_exp_brown[2]
-            ) and household.utility_exp_brown[1] >= household.utility_brown[1]):
-                household.act2 = True
-                household.act21 = True
-                household.act50 = True
-                household.hh_actions[2] = 1
-                actions[1] = True
-        
-        # Action 3: Switching to green electricity
-        if not (household.act31 or household.act32):
-            if (household.utility_exp_brown[2] >= max(
-                household.utility_exp_brown[0],
-                household.utility_exp_brown[1],
-                household.utility_exp_brown[2]
-            ) and household.utility_exp_brown[2] >= household.utility_brown[2]):
-                household.act3 = True
-                household.act31 = True
-                household.flag = 2  # Switch to green electricity
-                household.hh_actions[4] = 1
-                actions[2] = True
-        
-        return actions
-    
-    def _decide_grey_household(self, household, utility_calculator) -> List[bool]:
-        """Make decisions for household on grey."""
-        actions = [False, False, False]
-        
-        # Action 1: Investment (PV)
-        if not household.act12:
-            if (household.utility_exp_grey[0] >= max(
-                household.utility_exp_grey[0],
-                household.utility_exp_grey[1],
-                household.utility_exp_grey[2]
-            ) and household.utility_exp_grey[0] >= household.utility_grey[0]):
-                household.act1 = True
-                household.act12 = True
-                household.hh_actions[1] = 1
-                actions[0] = True
-        
-        # Action 2: Conservation
-        if not household.act40:
-            if (household.utility_exp_grey[1] >= max(
-                household.utility_exp_grey[0],
-                household.utility_exp_grey[1],
-                household.utility_exp_grey[2]
-            ) and household.utility_exp_grey[1] >= household.utility_grey[1]):
-                household.act2 = True
-                household.act50 = True
-                household.act40 = True
-                household.hh_actions[3] = 1
-                actions[1] = True
-        
-        # Action 3: Switching to brown electricity
-        if not household.act32:
-            if (household.utility_exp_grey[2] >= max(
-                household.utility_exp_grey[0],
-                household.utility_exp_grey[1],
-                household.utility_exp_grey[2]
-            ) and household.utility_exp_grey[2] >= household.utility_grey[2]):
-                household.act3 = True
-                household.act32 = True
-                household.flag = 1  # Switch to brown electricity
-                household.hh_actions[5] = 1
-                actions[2] = True
-        
-        return actions
-    
-    def _decide_green_household(self, household, utility_calculator) -> List[bool]:
-        """Make decisions for household already on green energy."""
-        actions = [False, False, False]
-        
-        # Action 1: Further Investment
-        if not household.act11:
-            if (household.utility_exp_green[0] >= max(
-                household.utility_exp_green[0],
-                household.utility_exp_green[1]
-            ) and household.utility_exp_green[0] >= household.utility_green[0]):
-                household.act1 = True
-                household.act11 = True
-                household.hh_actions[0] = 1
-                actions[0] = True
-        
-        # Action 2: Conservation (already implemented)
-        if not household.act21:
-            if (household.utility_exp_green[1] >= max(
-                household.utility_exp_green[0],
-                household.utility_exp_green[1]
-            ) and household.utility_exp_green[1] >= household.utility_green[1]):
-                household.act2 = True
-                household.act21 = True
-                household.hh_actions[2] = 1
-                actions[1] = True
-        
-        # No switching action for green households, already at low carbon
-        
-        return actions
-    
+
     def calculate_energy_savings(self, household, prices: Dict[str, float]) -> float:
         """
         Calculate energy saved from actions.
@@ -280,6 +226,51 @@ class DecisionMaker:
         return investment, switching_benefit
     
     def calculate_emissions_avoided(self, household, prices: Dict[str, float]) -> float:
+        """
+        Calculate CO2 emissions avoided by actions.
+        
+        Conversion: ~0.5 kg CO2 per kWh of fossil fuel electricity
+        
+        Args:
+            household: Household object
+            prices: Dictionary with market info
+            
+        Returns:
+            Total CO2 avoided (kg)
+        """
+        co2_factor = 0.5  # kg CO2 per kWh of FF electricity
+        emissions_avoided = 0.0
+        
+        # Initialize em_avoided as dictionary if it's a list or doesn't exist
+        if not hasattr(household, 'em_avoided') or isinstance(household.em_avoided, list):
+            household.em_avoided = {
+                'investment': 0.0,
+                'conservation': 0.0,
+                'switching': 0.0
+            }
+        
+        # Investment savings
+        if household.act1 or household.act11 or household.act12:
+            saved = INVESTMENT_PV_ENERGY_OUTPUT * co2_factor
+            emissions_avoided += saved
+            household.em_avoided['investment'] += saved
+        
+        # Conservation savings (only if was on FF before)
+        if household.act2 or household.act21 or household.act40:
+            if household.flag == 0:  # Currently on FF/grey
+                conservation_amount = household.h_q * CONSERVATION_RATE
+                saved = conservation_amount * co2_factor
+                emissions_avoided += saved
+                household.em_avoided['conservation'] += saved
+        
+        # Switching to renewable
+        if household.act3 or household.act31 or household.act32:
+            # Avoid emissions for entire consumption switched to renewable
+            saved = household.h_q * co2_factor
+            emissions_avoided += saved
+            household.em_avoided['switching'] += saved
+        
+        return emissions_avoided
         """
         Calculate CO2 emissions avoided by actions.
         

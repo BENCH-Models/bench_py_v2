@@ -356,62 +356,58 @@ class BENCHModel:
         print(f"  Average Awareness: {avg_awareness:.2f}")
     
     def step(self) -> bool:
-            """Execute one year of simulation."""
-            if self.year > MODEL_END_YEAR:
-                return False
+        """Execute one year of simulation."""
+        if self.year > MODEL_END_YEAR:
+            return False
+        
+        if self.year == MODEL_START_YEAR and self.memory_recall:
+            self._recall_memory()
+        
+        self._update_prices()
+        
+        # --- PASS 1: Update individual attributes and raw budgets ---
+        for household in self.households:
+            household.set_income_for_year(self.year)
+            self.decision_maker.activate_knowledge(household, self.case_study)
+            self.decision_maker.update_motivation(household, self.case_study)
             
-            if self.year == MODEL_START_YEAR and self.memory_recall:
-                self._recall_memory()
+            for action_name in ['investment', 'conservation', 'switching']:
+                self.decision_maker.consider_action(household, action_name)
             
-            self._update_prices()
+            household.calculate_budgets(self.prices)
+            
+        # --- PASS 2: Global Population Normalization ---
+        self.utility_calculator.normalize_budgets(self.households)
+        
+        # --- PASS 3: Utility Evaluation & Decision Execution ---
+        for household in self.households:
+            # Normalize this agent's values
+            self.utility_calculator.normalize_budget_values(household)
+            
+            # Calculate expected utilities (now uses dictionary method)
+            self.utility_calculator.calculate_all_expected_utilities(household)
+            
+            # Execute choices (will need updated decision_maker)
+            self.decision_maker.decide_action(household, {}, self.utility_calculator)
+            
+            # Post-decision accounting
+            self.decision_maker.calculate_energy_savings(household, self.prices)
+            self.decision_maker.calculate_financial_outcomes(household, self.prices)
+            self.decision_maker.calculate_emissions_avoided(household, self.prices)
+            
+            # Record experienced utility
+            self.utility_calculator.calculate_actual_utility(household)
+            self.learning_mechanism.update_memory(household, self.year)
+        
+        # --- PASS 4: Social Learning & Aggregation ---
+        self._apply_social_learning()
+        
+        stats = self.statistics.aggregate_population_stats(self.households, self.year)
+        self.statistics.store_annual_stats(self.year, stats)
+        
+        self.year += 1
+        return True
 
-            
-            # --- PASS 1: Update individual attributes and raw budgets ---
-            for household in self.households:
-
-                household.set_income_for_year(self.year)#update income of the household based on its trajectory
-
-                self.decision_maker.activate_knowledge(household, self.case_study)
-                self.decision_maker.update_motivation(household, self.case_study)
-                
-                for action_type in range(3):
-                    self.decision_maker.consider_action(household, action_type)
-                
-                # Raw budgets calculated for everyone using current year prices
-                household.calculate_budgets(self.prices)
-                
-            # --- PASS 2: Global Population Normalization (Out of the loop!) ---
-            self.utility_calculator.normalize_budgets(self.households)
-            
-            # --- PASS 3: Utility Evaluation & Decision Execution ---
-            for household in self.households:
-                # Normalize this agent's values using the freshly computed global maxes
-                self.utility_calculator.normalize_budget_values(household)
-                
-                # Calculate expected utility profiles
-                self.utility_calculator.calculate_all_utilities(household, {})
-                
-                # Execute choices based on utilities
-                self.decision_maker.decide_action(household, {}, self.utility_calculator)
-                
-                # Post-decision accounting
-                self.decision_maker.calculate_energy_savings(household, self.prices)
-                self.decision_maker.calculate_financial_outcomes(household, self.prices)
-                self.decision_maker.calculate_emissions_avoided(household, self.prices)
-                
-                # Record experienced utility and memorize
-                self.utility_calculator.calculate_actual_utility(household)
-                self.learning_mechanism.update_memory(household, self.year)
-            
-            # --- PASS 4: Social Learning & Aggregation ---
-            self._apply_social_learning()
-            
-            stats = self.statistics.aggregate_population_stats(self.households, self.year)
-            self.statistics.store_annual_stats(self.year, stats)
-            
-            self.year += 1
-            return True
-    
     def _recall_memory(self) -> None:
         """Apply 2015 memory recall for historical behavior."""
         for household in self.households:

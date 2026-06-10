@@ -8,167 +8,190 @@ from typing import Dict, List, Optional
 from utils.constants import (
     FLAG_GRAY, FLAG_BROWN, FLAG_GREEN, FLAG_NAMES,
     GUILT_LOW, GUILT_HIGH,
-    ACTION_INVESTMENT, ACTION_CONSERVATION, ACTION_SWITCHING,
     BEHAVIORAL_SCALE_MAX, BEHAVIORAL_SCALE_MIN,
     PBC_MIN, PBC_MAX,
     INVESTMENT_PV_ANNUAL_COST, INVESTMENT_PV_ENERGY_OUTPUT,
-    CONSERVATION_RATE
+    CONSERVATION_RATE,
+    ACTIONS
 )
 
 
 class Household:
     """
     Represents a single household agent in the BENCH model.
-    
-    Attributes cover:
-    - Demographic characteristics (income group, age, ownership)
-    - Energy consumption (quantity, type, source)
-    - Behavioral factors (knowledge, awareness, norms, motivation, PBC)
-    - Utilities (expected and actual for each action)
-    - Actions taken (investment, conservation, switching)
-    - Financial outcomes (investments, savings)
-    - Environmental outcomes (emissions avoided)
-    - Memory and learning
     """
+    
+
     
     def __init__(self, h_id: int, income_group: int, income: float, 
                  consumption_q: float, energy_flag: int, 
                  dwelling_label: int, owner: bool = True, **kwargs):
         """
         Initialize a household agent.
-        
-        Args:
-            h_id: Unique household identifier
-            income_group: Income group (1-7)
-            income: Annual household income
-            consumption_q: Baseline electricity consumption (kWh/year)
-            energy_flag: Current energy source (0=gray, 1=brown, 2=green)
-            dwelling_label: Energy efficiency label (1-6, A-F)
-            owner: Whether household owns dwelling (affects investment eligibility)
-            **kwargs: Additional attributes from data
         """
         # === IDENTIFICATION ===
         self.h_id = h_id
-        self.unique_id = uuid.uuid4()  # For tracking in model
+        self.unique_id = uuid.uuid4()
         
         # === DEMOGRAPHIC ===
-        self.h_income_group = income_group  # 1-7
+        self.h_income_group = income_group
         self.h_income = income
         self.h_age = kwargs.get('h_age')
         self.owner = owner
-        
-        # --- NEW ATTRIBUTE: Multi-year income tracking ---
-        # Defaults to mapping the base year to the provided income if not passed explicitly via kwargs
         self.income_trajectory = kwargs.get('income_trajectory', {2015: income})
         
         # === DWELLING ===
-        self.dw_el = dwelling_label  # 1-6 (A-F equivalent)
-        self.dw_st = kwargs.get('dw_st')  # Dwelling structure type
+        self.dw_el = dwelling_label
+        self.dw_st = kwargs.get('dw_st')
         
         # === ENERGY CONSUMPTION ===
-        self.h_q = consumption_q  # Base electricity consumption (kWh/year)
-        self.flag = energy_flag  # 0=gray, 1=brown, 2=green
+        self.h_q = consumption_q
+        self.flag = energy_flag  # 0=grey, 1=brown, 2=green
         
-        # === BEHAVIORAL ATTRIBUTES (0-7 scale or specified range) ===
-        self.know = kwargs.get('know')  # Knowledge (0-7)
-        self.cee_aw = kwargs.get('cee_aw')  # Climate/environmental awareness
-        self.ed_aw = kwargs.get('ed_aw')  # Education/awareness
-        self.h_aware = 0.0  # Average awareness: (know + cee_aw + ed_aw) / 3
+        # === BEHAVIORAL ATTRIBUTES ===
+        self.know = kwargs.get('know', 0.0)
+        self.cee_aw = kwargs.get('cee_aw', 0.0)
+        self.ed_aw = kwargs.get('ed_aw', 0.0)
+        self.h_aware = 0.0
+        self.guilt = GUILT_LOW
+        self.K = 0.0
         
-        self.guilt = GUILT_LOW  # 'L' (low) or 'H' (high)
-        self.K = 0.0  # Normalized guilt factor (0-1): h_aware / 7
+        # === NORMS & ATTITUDES - Now using dictionaries ===
+        self.per_nab = {
+            'investment': 0.0,
+            'conservation': 0.0,
+            'switching': 0.0
+        }
         
-        # === NORMS & ATTITUDES (0-7 scale) ===
-        # Personal norms for 3 action types
-        self.per_nab = [0.0, 0.0, 0.0]  # [action1, action2, action3]
+        self.su_nor = {
+            'investment': 0.0,
+            'conservation': 0.0,
+            'switching': 0.0
+        }
         
-        # Social/subjective norms for 3 action types
-        self.su_nor = [0.0, 0.0, 0.0]
+        # === MOTIVATION ===
+        self.h_motiv = {
+            'investment': 0.0,
+            'conservation': 0.0,
+            'switching': 0.0
+        }
         
-        # === MOTIVATION (0-7 scale, aggregated) ===
-        self.h_motiv = [0.0, 0.0, 0.0]  # Average of personal + social norms
-        self.M = [0.0, 0.0, 0.0]  # Normalized motivation (0-1): motiv / 7
+        self.M = {
+            'investment': 0.0,
+            'conservation': 0.0,
+            'switching': 0.0
+        }
         
-        # Responsibility (behavioral factor)
         self.responsibility = False
         
-        # === PERCEIVED BEHAVIORAL CONTROL (0-7 scale) ===
-        self.pbc = [0.0, 0.0, 0.0]  # PBC for [action1, action2, action3]
+        # === PERCEIVED BEHAVIORAL CONTROL ===
+        self.pbc = {
+            'investment': 0.0,
+            'conservation': 0.0,
+            'switching': 0.0
+        }
         
-        # === CONSIDERATION FACTORS (behavioral adjustment, 0.2-0.7) ===
-        self.delta = [0.0, 0.0, 0.0]  # [delta1, delta2, delta3]
-        self.consideration = [GUILT_LOW, GUILT_LOW, GUILT_LOW]  # 'L' or 'H' for each action
+        # === CONSIDERATION FACTORS ===
+        self.delta = {
+            'investment': 0.0,
+            'conservation': 0.0,
+            'switching': 0.0
+        }
         
-        # === UTILITIES (Budget/consumption combinations) ===
-        # z_brown/z_grey/z_green: discretionary income for different scenarios
-        self.z_brown = [0.0, 0.0, 0.0]  # z_brown1, z_brown2, z_brown3
-        self.z_grey = [0.0, 0.0, 0.0]   # z_grey1, z_grey2, z_grey3
-        self.z_green = [0.0, 0.0, 0.0] # z_green1, z_green2, z_green3
+        self.consideration = {
+            'investment': GUILT_LOW,
+            'conservation': GUILT_LOW,
+            'switching': GUILT_LOW
+        }
         
-        # Normalized z values (0-1)
-        self.z_brown_norm = [0.0, 0.0, 0.0]
-        self.z_grey_norm = [0.0, 0.0, 0.0]
-        self.z_green_norm = [0.0, 0.0, 0.0]
+        # === BUDGETS (Z values) - Using dictionaries ===
+        self.z_grey = {
+            'conservation': 0.0,
+            'investment': 0.0,
+            'switching': 0.0
+        }
+        self.z_brown = {
+            'conservation': 0.0,
+            'investment': 0.0,
+            'switching': 0.0
+        }
+        self.z_green = {
+            'conservation': 0.0,
+            'investment': 0.0
+        }
         
-        # === EXPECTED UTILITIES ===
-        # green electricity utilities
-        self.utility_exp_brown = [0.0, 0.0, 0.0]  # UE_brown1, UE_brown2, UE_brown3
+        # Normalized budgets
+        self.z_grey_norm = {
+            'conservation': 0.0,
+            'investment': 0.0,
+            'switching': 0.0
+        }
+        self.z_brown_norm = {
+            'conservation': 0.0,
+            'investment': 0.0,
+            'switching': 0.0
+        }
+        self.z_green_norm = {
+            'conservation': 0.0,
+            'investment': 0.0
+        }
         
-        # grey electricity utilities
-        self.utility_exp_grey = [0.0, 0.0, 0.0]   # UE_grey1, UE_grey2, UE_grey3
-        
-        # Zero-carbon utilities
-        self.utility_exp_green = [0.0, 0.0, 0.0]  # UE_green1, UE_green2, UE_green3
+        # === EXPECTED UTILITIES - Using nested dictionaries ===
+        self.utility_exp = {
+            'grey': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0},
+            'brown': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0},
+            'green': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0}
+        }
         
         # === ACTUAL UTILITIES ===
-        self.utility_brown = [0.0, 0.0, 0.0]
-        self.utility_grey = [0.0, 0.0, 0.0]
-        self.utility_green = [0.0, 0.0, 0.0]
+        self.utility_actual = {
+            'grey': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0},
+            'brown': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0},
+            'green': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0}
+        }
         
-        # === ACTIONS TAKEN (boolean flags) ===
-        # Action 1: Investment (PV installation)
-        self.act1 = False
-        self.act11 = False  # Specific to Brown
-        self.act12 = False  # Specific to Grey
+        # === ACTIONS TAKEN ===
+        self.act1 = False  # General investment flag
+        self.act11 = False  # Brown investment
+        self.act12 = False  # Grey investment
         
-        # Action 2: Conservation (energy efficiency)
-        self.act2 = False
-        self.act50 = False  # Alternative naming for conservation
-        self.act21 = False  # Conservation action
-        self.act40 = False  # Alternative conservation action
+        self.act2 = False  # General conservation flag
+        self.act50 = False  # Conservation
+        self.act21 = False  # Brown/green conservation
+        self.act40 = False  # Grey conservation
         
-        # Action 3: Switching (to renewable)
-        self.act3 = False
-        self.act31 = False  # Switch to brown
-        self.act32 = False  # Switch from brown to green
+        self.act3 = False  # General switching flag
+        self.act31 = False  # Brown -> green
+        self.act32 = False  # Grey -> brown
         
         # Action vector: [act11, act12, act21, act40, act31, act32]
         self.hh_actions = [0, 0, 0, 0, 0, 0]
         
         # === FINANCIAL OUTCOMES ===
-        # Investment (PV installation)
-        self.h_invest = 0.0  # Annual investment amount
-        self.h_invest_save = 0.0  # Cumulative energy saved by PV
-        self.h_invest_total = 0.0  # Total invested
-        self.counter_invest = 0  # Years invested (up to payback period)
+        self.h_invest = 0.0
+        self.h_invest_save = 0.0
+        self.h_invest_total = 0.0
+        self.counter_invest = 0
         
-        # Conservation (energy efficiency)
-        self.h_conserv = 0.0  # Energy saved through conservation (kWh)
-        self.h_conserv_p = 0.0  # Money saved through conservation
-        self.h_conserv_1_7 = [0.0] * 7  # Conservation by income group (for tracking)
+        self.h_conserv = 0.0
+        self.h_conserv_p = 0.0
+        self.h_conserv_1_7 = [0.0] * 7
         
-        # Switching (to renewable energy)
-        self.h_switch = 0.0  # Money saved/spent on switching
+        self.h_switch = 0.0
         
         # === ENVIRONMENTAL OUTCOMES ===
-        self.em_total = 0.0  # Total CO2 emissions (kg)
-        self.em_avoided = [0.0, 0.0, 0.0]  # Emissions avoided by action type
+        self.em_total = 0.0
+        self.em_avoided = {
+            'investment': 0.0,
+            'conservation': 0.0,
+            'switching': 0.0
+        }
         
         # === HOUSEHOLD STATUS ===
-        self.hh_sta = "Normal"  # "Normal" or "Low-paid1/2/3" (income constraints)
+        self.hh_sta = "Normal"
         
         # === MEMORY & LEARNING ===
-        self.memory = {}  # Store historical decisions
+        self.memory = {}
         self.influences = {
             'influence_know': 0.0,
             'influence_cee_aw': 0.0,
@@ -176,14 +199,13 @@ class Household:
             'influence_per': 0.0,
             'influence_su': 0.0,
         }
-        self.experience = {}  # Track past experiences
-
+        self.experience = {}
+        
+        # For normalization denominators
+        self.e_norm_denom = 1.0
 
     def set_income_for_year(self, year: int) -> None:
-        """
-        Updates the active annual income using the time series trajectory.
-        If data for the specific year is missing, it preserves the current income as a fallback.
-        """
+        """Updates the active annual income using the time series trajectory."""
         if self.income_trajectory and year in self.income_trajectory:
             self.h_income = float(self.income_trajectory[year])
         
@@ -191,13 +213,11 @@ class Household:
         """Calculate average awareness from components."""
         self.h_aware = (self.know + self.cee_aw + self.ed_aw) / 3.0
         
-        # Determine guilt level based on awareness
         if self.h_aware < 5.21:
             self.guilt = GUILT_LOW
         else:
             self.guilt = GUILT_HIGH
         
-        # Normalize guilt to K factor (0-1)
         if self.guilt == GUILT_HIGH:
             self.K = self.h_aware / BEHAVIORAL_SCALE_MAX
         else:
@@ -206,120 +226,110 @@ class Household:
     def update_motivation(self, case_study: str) -> None:
         """
         Calculate motivation from personal and social norms.
-        Sets responsibility flag based on thresholds (varies by case study).
-        
-        Args:
-            case_study: "Netherlands-Overijssel" or "Spain-Navarre"
+        Uses named actions instead of indices.
         """
         # Calculate average motivation for each action
-        for i in range(3):
-            self.h_motiv[i] = (self.per_nab[i] + self.su_nor[i]) / 2.0
-            
-            # Normalize motivation (0-1)
-            self.M[i] = self.h_motiv[i] / BEHAVIORAL_SCALE_MAX
+        for action in ACTIONS:
+            self.h_motiv[action] = (self.per_nab[action] + self.su_nor[action]) / 2.0
+            self.M[action] = self.h_motiv[action] / BEHAVIORAL_SCALE_MAX
         
         # Determine responsibility based on case-specific thresholds
         self.responsibility = False
         
         if self.guilt == GUILT_HIGH:
             if case_study == "Spain-Navarre":
-                thresholds = [
-                    (5.67, 4.77),  # Action 1
-                    (5.40, 4.45),  # Action 2
-                    (5.78, 5.05),  # Action 3
-                ]
+                thresholds = {
+                    'investment': (5.67, 4.77),
+                    'conservation': (5.40, 4.45),
+                    'switching': (5.78, 5.05),
+                }
             elif case_study == "Netherlands-Overijssel":
-                thresholds = [
-                    (5.67, 4.45),  # Action 1
-                    (5.40, 3.66),  # Action 2
-                    (5.78, 5.05),  # Action 3
-                ]
+                thresholds = {
+                    'investment': (5.67, 4.45),
+                    'conservation': (5.40, 3.66),
+                    'switching': (5.78, 5.05),
+                }
             else:
-                thresholds = [(0, 0), (0, 0), (0, 0)]
+                thresholds = {
+                    'investment': (0, 0),
+                    'conservation': (0, 0),
+                    'switching': (0, 0),
+                }
             
-            for i in range(3):
-                if (self.per_nab[i] >= thresholds[i][0] and 
-                    self.su_nor[i] >= thresholds[i][1]):
+            for action in ACTIONS:
+                if (self.per_nab[action] >= thresholds[action][0] and 
+                    self.su_nor[action] >= thresholds[action][1]):
                     self.responsibility = True
     
-    def consider_constraints(self, action_type: int) -> None:
+    def consider_constraints(self, action: str) -> None:
         """
         Determine consideration level and delta factor based on PBC.
         
         Args:
-            action_type: 0 (investment), 1 (conservation), or 2 (switching)
+            action: 'investment', 'conservation', or 'switching'
         """
-        pbc_value = self.pbc[action_type]
+        pbc_value = self.pbc[action]
         
         # Determine consideration level
         if pbc_value < 4:
-            self.consideration[action_type] = GUILT_LOW
+            self.consideration[action] = GUILT_LOW
         else:
-            self.consideration[action_type] = GUILT_HIGH
+            self.consideration[action] = GUILT_HIGH
         
         # Determine delta factor based on PBC value
         if pbc_value < 2:
-            self.delta[action_type] = 0.2
+            self.delta[action] = 0.2
         elif pbc_value < 3:
-            self.delta[action_type] = 0.3
+            self.delta[action] = 0.3
         elif pbc_value < 4:
-            self.delta[action_type] = 0.4
+            self.delta[action] = 0.4
         elif pbc_value < 5:
-            self.delta[action_type] = 0.5
+            self.delta[action] = 0.5
         elif pbc_value < 6:
-            self.delta[action_type] = 0.6
+            self.delta[action] = 0.6
         else:
-            self.delta[action_type] = 0.7
+            self.delta[action] = 0.7
     
     def calculate_budgets(self, prices: Dict[str, float]) -> None:
-            """
-            Calculate discretionary income (z) for different scenarios matching NetLogo exactly.
-            Grey = Fossil Fuels (ff)
-            Brown = Low Carbon Electricity (lce)
-            Green = Super Green (zero)
-            """
-            if self.h_q <= 0:
-                return
-                
-            # Reset household state every single step so income trajectories can recover agents
-            self.hh_sta = "Normal"
+        """Calculate discretionary income (z) for different scenarios."""
+        if self.h_q <= 0:
+            return
             
-            # Match your clean price variables
-            m_p_grey = prices.get('m_p_grey', 0.0)
-            m_p_brown = prices.get('m_p_brown', 0.0)
-            m_p_green = prices.get('m_p_green', 0.0)
-            
-            # Household parameters
-            h_q = self.h_q
-            h_income = self.h_income
-            h_conserv_p = self.h_conserv_p
-            h_switch = self.h_switch
-            h_invest = self.h_invest
-            h_invest_save = self.h_invest_save 
+        self.hh_sta = "Normal"
+        
+        m_p_grey = prices.get('m_p_grey', 0.0)
+        m_p_brown = prices.get('m_p_brown', 0.0)
+        m_p_green = prices.get('m_p_green', 0.0)
+        
+        h_q = self.h_q
+        h_income = self.h_income
+        h_conserv_p = self.h_conserv_p
+        h_switch = self.h_switch
+        h_invest = self.h_invest
+        h_invest_save = self.h_invest_save
 
-            # --- EXACT NETLOGO FORMULAS WITH COLOR VARIABLE NAMES ---
-            # Scenario 1: Conservation Path (1700 kWh penalty overhead baseline)
-            self.z_brown1 = h_income - ((h_q * m_p_brown) + (1700 * m_p_brown) + 487.59 + h_conserv_p + h_switch)
-            self.z_grey1  = h_income - ((h_q * m_p_grey) + (1700 * m_p_grey) + 487.59 + h_conserv_p + h_switch)
-            self.z_green1 = h_income - ((h_q * m_p_green) + (1700 * m_p_green) + 487.59 + h_conserv_p + h_switch)
+        # Scenario 1: Conservation Path
+        self.z_grey['conservation'] = h_income - ((h_q * m_p_grey) + (1700 * m_p_grey) + 487.59 + h_conserv_p + h_switch)
+        self.z_brown['conservation'] = h_income - ((h_q * m_p_brown) + (1700 * m_p_brown) + 487.59 + h_conserv_p + h_switch)
+        self.z_green['conservation'] = h_income - ((h_q * m_p_green) + (1700 * m_p_green) + 487.59 + h_conserv_p + h_switch)
 
-            # Scenario 2: Investment Path (Subtracts investment costs, reduces consumption by half)
-            self.z_brown2 = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_brown) + h_invest + ((0.5 * h_q) * m_p_brown) + h_switch)
-            self.z_grey2  = h_income - ((h_q * m_p_grey) + (h_invest_save * m_p_grey) + h_invest + ((0.5 * h_q) * m_p_grey) + h_switch)
-            self.z_green2 = h_income - ((h_q * m_p_green) + (h_invest_save * m_p_green) + h_invest + (0.5 * h_q) + h_switch)
-            
-            # Scenario 3: Switching Path (Includes the specific fuel tariff switching penalty adjustments)
-            self.z_brown3 = h_income - ((h_q * m_p_green) + (h_invest_save * m_p_green) + h_invest + h_conserv_p + (m_p_green - m_p_brown))
-            self.z_grey3  = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_brown) + h_invest + h_conserv_p + (m_p_brown - m_p_grey))
+        # Scenario 2: Investment Path
+        self.z_grey['investment'] = h_income - ((h_q * m_p_grey) + (h_invest_save * m_p_grey) + h_invest + ((0.5 * h_q) * m_p_grey) + h_switch)
+        self.z_brown['investment'] = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_brown) + h_invest + ((0.5 * h_q) * m_p_brown) + h_switch)
+        self.z_green['investment'] = h_income - ((h_q * m_p_green) + (h_invest_save * m_p_green) + h_invest + (0.5 * h_q) + h_switch)
+        
+        # Scenario 3: Switching Path
+        self.z_brown['switching'] = h_income - ((h_q * m_p_green) + (h_invest_save * m_p_green) + h_invest + h_conserv_p + (m_p_green - m_p_brown))
+        self.z_grey['switching'] = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_brown) + h_invest + h_conserv_p + (m_p_brown - m_p_grey))
 
-            # Apply low-income safety limits from NetLogo using your explicit variable names
-            if self.z_grey1 < 0 or self.z_grey2 < 0:
-                self.hh_sta = "Low-paid1"
-            elif self.z_brown1 < 0 or self.z_brown2 < 0 or self.z_brown3 < 0:
-                self.hh_sta = "Low-paid1"
-            elif self.z_green1 < 0 or self.z_green2 < 0:
-                self.hh_sta = "Low-paid1"
-                
+        # Apply low-income safety limits
+        if self.z_grey['conservation'] < 0 or self.z_grey['investment'] < 0:
+            self.hh_sta = "Low-paid1"
+        elif self.z_brown['conservation'] < 0 or self.z_brown['investment'] < 0 or self.z_brown.get('switching', 0) < 0:
+            self.hh_sta = "Low-paid1"
+        elif self.z_green['conservation'] < 0 or self.z_green['investment'] < 0:
+            self.hh_sta = "Low-paid1"
+    
     def get_action_status(self) -> Dict[str, bool]:
         """Return current action status as dictionary."""
         return {
@@ -329,12 +339,10 @@ class Household:
         }
     
     def get_state_dict(self) -> Dict:
-        """
-        Return current household state as dictionary for output/logging.
-        """
+        """Return current household state as dictionary for output/logging."""
         return {
             'h_id': self.h_id,
-            'year': None,  # Will be set by model
+            'year': None,
             'income_group': self.h_income_group,
             'income': self.h_income,
             'consumption': self.h_q,
@@ -342,12 +350,12 @@ class Household:
             'dwelling_label': self.dw_el,
             'awareness': self.h_aware,
             'guilt': self.guilt,
-            'motivation_avg': sum(self.h_motiv) / 3,
-            'pbc_avg': sum(self.pbc) / 3,
+            'motivation_avg': sum(self.h_motiv.values()) / 3,
+            'pbc_avg': sum(self.pbc.values()) / 3,
             'action_investment': self.act1,
             'action_conservation': self.act2,
             'action_switching': self.act3,
             'investment_total': self.h_invest_total,
             'conservation_savings': self.h_conserv,
-            'emissions_avoided': sum(self.em_avoided),
+            'emissions_avoided': sum(self.em_avoided.values()),
         }

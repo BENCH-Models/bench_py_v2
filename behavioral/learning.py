@@ -5,8 +5,6 @@ Social learning and network influence mechanisms
 from typing import Dict, List
 import random
 from utils.constants import (
-    ACTION_INVESTMENT,
-    ACTION_SWITCHING,
     BEHAVIORAL_SCALE_MAX,
     MEMORY_RULES
 )
@@ -39,14 +37,15 @@ class LearningMechanism:
             sample_count = min(2, len(neighboring_households))
             neighbors_subsample = random.sample(neighboring_households, sample_count)
         else:
-           ValueError(f"Unknown learning type: {learning_type}")
+            raise ValueError(f"Unknown learning type: {learning_type}")
 
         # Build neighborhood statistics including the active source household.
-
         know_values = [hh.know for hh in neighbors_subsample]
         awareness_values = [hh.h_aware for hh in neighbors_subsample]
-        su_invest_values = [hh.su_nor[ACTION_INVESTMENT] for hh in neighbors_subsample]
-        pbc_switch_values = [hh.pbc[ACTION_SWITCHING] for hh in neighbors_subsample]
+        
+        # FIX: Use dictionary access for su_nor and pbc
+        su_invest_values = [hh.su_nor.get('investment', 0) for hh in neighbors_subsample]
+        pbc_switch_values = [hh.pbc.get('switching', 0) for hh in neighbors_subsample]
 
         def mean(values):
             return sum(values) / len(values) if values else 0.0
@@ -64,7 +63,7 @@ class LearningMechanism:
         target_su_invest = max(mean(su_invest_values), median(su_invest_values))
         target_pbc_switch = max(mean(pbc_switch_values), median(pbc_switch_values))
 
-        for neighbor in neighbors_subsample:#CENTRAL INDIVIDUAL TEACHES NEIGHBORS
+        for neighbor in neighbors_subsample:  # CENTRAL INDIVIDUAL TEACHES NEIGHBORS
             if neighbor.know < target_know:
                 neighbor.know = min(neighbor.know * 1.05, BEHAVIORAL_SCALE_MAX)
 
@@ -72,25 +71,27 @@ class LearningMechanism:
                 neighbor.h_aware = min(neighbor.h_aware * 1.05, BEHAVIORAL_SCALE_MAX)
                 neighbor.update_awareness()
 
-            if neighbor.su_nor[ACTION_INVESTMENT] < target_su_invest:
-                neighbor.su_nor[ACTION_INVESTMENT] = min(
-                    neighbor.su_nor[ACTION_INVESTMENT] * 1.05,
+            # FIX: Use dictionary access with action name
+            if neighbor.su_nor.get('investment', 0) < target_su_invest:
+                neighbor.su_nor['investment'] = min(
+                    neighbor.su_nor.get('investment', 0) * 1.05,
                     BEHAVIORAL_SCALE_MAX
                 )
 
-            if neighbor.pbc[ACTION_SWITCHING] < target_pbc_switch:
-                neighbor.pbc[ACTION_SWITCHING] = min(
-                    neighbor.pbc[ACTION_SWITCHING] * 1.05,
+            # FIX: Use dictionary access with action name
+            if neighbor.pbc.get('switching', 0) < target_pbc_switch:
+                neighbor.pbc['switching'] = min(
+                    neighbor.pbc.get('switching', 0) * 1.05,
                     BEHAVIORAL_SCALE_MAX
                 )
 
         # Reinforce perceived behavioral control for the active household itself.
-        for action_index in range(len(source_household.pbc)):
-            source_household.pbc[action_index] = min(
-                source_household.pbc[action_index] * 1.05,
+        # FIX: Iterate over dictionary keys instead of range
+        for action in source_household.pbc:
+            source_household.pbc[action] = min(
+                source_household.pbc[action] * 1.05,
                 BEHAVIORAL_SCALE_MAX
             )
-
 
     def recall_memory(self, household, initial_actions: Dict, 
                      income_group: int, energy_flag: int,
@@ -115,12 +116,14 @@ class LearningMechanism:
         # Memory recall rules (from NetLogo recallmemory procedure)
         # Different probabilities for different income groups and energy sources
         
-
         if income_group not in MEMORY_RULES:
             print(f"Warning: No memory rules for income group {income_group}")
             return 
         
         rules = MEMORY_RULES[income_group].get(energy_flag)
+        
+        if rules is None:
+            return
         
         for action_name, (probability, value) in rules.items():
             if random.random() < probability:
@@ -169,4 +172,3 @@ class LearningMechanism:
             'investment': household.h_invest,
             'savings': household.h_conserv,
         })
-

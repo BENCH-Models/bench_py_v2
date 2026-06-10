@@ -27,16 +27,8 @@ FLAG_NAMES = {0: 'gray', 1: 'brown', 2: 'green'}
 GUILT_LOW = 'L'
 GUILT_HIGH = 'H'
 
-# Action Types
-ACTION_INVESTMENT = 0      # Solar PV installation
-ACTION_CONSERVATION = 1    # Energy efficiency/conservation
-ACTION_SWITCHING = 2       # Switch to renewable
-
-ACTION_NAMES = {
-    0: 'Investment (PV)',
-    1: 'Conservation',
-    2: 'Switching'
-}
+# Define action names as class constants for consistency
+ACTIONS = ['investment', 'conservation', 'switching']
 
 # Behavioral Scales (0-7)
 BEHAVIORAL_SCALE_MIN = 0
