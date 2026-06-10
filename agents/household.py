@@ -54,21 +54,21 @@ class Household:
         # === DEMOGRAPHIC ===
         self.h_income_group = income_group  # 1-7
         self.h_income = income
-        self.h_age = kwargs.get('h_age', None)
+        self.h_age = kwargs.get('h_age')
         self.owner = owner
         
         # === DWELLING ===
         self.dw_el = dwelling_label  # 1-6 (A-F equivalent)
-        self.dw_st = kwargs.get('dw_st', 0)  # Dwelling structure type
+        self.dw_st = kwargs.get('dw_st')  # Dwelling structure type
         
         # === ENERGY CONSUMPTION ===
         self.h_q = consumption_q  # Base electricity consumption (kWh/year)
         self.flag = energy_flag  # 0=gray, 1=brown, 2=green
         
         # === BEHAVIORAL ATTRIBUTES (0-7 scale or specified range) ===
-        self.know = kwargs.get('know', 0.0)  # Knowledge (0-7)
-        self.cee_aw = kwargs.get('cee_aw', 0.0)  # Climate/environmental awareness
-        self.ed_aw = kwargs.get('ed_aw', 0.0)  # Education/awareness
+        self.know = kwargs.get('know')  # Knowledge (0-7)
+        self.cee_aw = kwargs.get('cee_aw')  # Climate/environmental awareness
+        self.ed_aw = kwargs.get('ed_aw')  # Education/awareness
         self.h_aware = 0.0  # Average awareness: (know + cee_aw + ed_aw) / 3
         
         self.guilt = GUILT_LOW  # 'L' (low) or 'H' (high)
@@ -268,12 +268,13 @@ class Household:
         if self.h_q <= 0:
             return
         
-        m_p_grey = prices.get('m_p_grey', 0.1)
-        m_p_brown = prices.get('m_p_brown', 0.15)
-        m_p_green = prices.get('m_p_green', 0.12)
+        m_p_grey = prices.get('m_p_grey')
+        m_p_brown = prices.get('m_p_brown')
+        m_p_green = prices.get('m_p_green')
         
         # Scenario 1: No action (baseline consumption)
-        base_fixed = 1700 * m_p_brown + 487.59  # Fixed costs
+        base_fixed = 1700 * m_p_brown + 487.59  # Fixed costs 
+        #1700 is based on http://www.theecoexperts.co.uk/how-much-electricity-does-average-solar-panel-system-generate and 2KW size
         
         self.z_brown[0] = self.h_income - ((self.h_q * m_p_brown) + base_fixed + 
                                           self.h_conserv_p + self.h_switch)
@@ -321,7 +322,7 @@ class Household:
             'income_group': self.h_income_group,
             'income': self.h_income,
             'consumption': self.h_q,
-            'energy_source': FLAG_NAMES.get(self.flag, 'Unknown'),
+            'energy_source': FLAG_NAMES.get(self.flag),
             'dwelling_label': self.dw_el,
             'awareness': self.h_aware,
             'guilt': self.guilt,

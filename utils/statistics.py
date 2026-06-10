@@ -212,11 +212,11 @@ class StatisticsAggregator:
         for year in range(start_year, end_year + 1):
             if year in self.annual_stats:
                 stats = self.annual_stats[year]
-                cumulative['total_investment'] += stats.get('total_investment', 0)
-                cumulative['total_energy_saved'] += stats.get('total_energy_saved_kwh', 0)
-                cumulative['total_emissions_avoided'] += stats.get('total_emissions_avoided_kg_co2', 0)
-                cumulative['total_conservation_savings'] += stats.get('total_conservation_savings_money', 0)
-                cumulative['actions_cumulative'] += stats.get('action_total_count', 0)
+                cumulative['total_investment'] += stats.get('total_investment')
+                cumulative['total_energy_saved'] += stats.get('total_energy_saved_kwh')
+                cumulative['total_emissions_avoided'] += stats.get('total_emissions_avoided_kg_co2')
+                cumulative['total_conservation_savings'] += stats.get('total_conservation_savings_money')
+                cumulative['actions_cumulative'] += stats.get('action_total_count')
         
         return cumulative
     
@@ -237,7 +237,7 @@ class StatisticsAggregator:
         
         for year in range(start_year, end_year + 1):
             if year in self.annual_stats:
-                value = self.annual_stats[year].get(variable, 0)
+                value = self.annual_stats[year].get(variable)
                 trajectory.append((year, value))
         
         return trajectory

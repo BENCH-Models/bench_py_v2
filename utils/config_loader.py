@@ -62,12 +62,12 @@ def normalize_run_config(config: Dict[str, Any]) -> Dict[str, Any]:
     if 'learning' in normalized and 'learning_type' not in normalized:
         normalized['learning_type'] = normalized.pop('learning')
 
-    normalized['case_study'] = normalized.get('case_study', CASE_STUDIES[0])
-    normalized['scenario'] = normalized.get('scenario', SCENARIOS[0])
-    normalized['policy'] = normalized.get('policy', POLICIES[0])
-    normalized['learning_type'] = normalized.get('learning_type', DEFAULT_LEARNING_TYPE)
+    normalized['case_study'] = normalized.get('case_study')
+    normalized['scenario'] = normalized.get('scenario')
+    normalized['policy'] = normalized.get('policy')
+    normalized['learning_type'] = normalized.get('learning_type',)
     normalized['run_label'] = normalized.get('run_label')
-    normalized['debug'] = normalized.get('debug', False)
+    normalized['debug'] = normalized.get('debug')
 
     # Keep values even if not in known lists so experiments can use custom labels.
     if normalized['case_study'] not in CASE_STUDIES:

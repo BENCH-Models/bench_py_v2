@@ -242,7 +242,7 @@ class DecisionMaker:
             household.h_conserv = conservation_amount
             
             # Calculate money saved
-            price = prices.get('m_p_grey', 0.15) if household.flag == 0 else prices.get('m_p_brown', 0.15)
+            price = prices.get('m_p_grey') if household.flag == 0 else prices.get('m_p_brown')
 
             household.h_conserv_p = conservation_amount * price
         
@@ -272,8 +272,8 @@ class DecisionMaker:
         
         # Switching benefit (price difference)
         if household.act3 or household.act31 or household.act32:
-            old_price = prices.get('m_p_grey', 0.15) if household.flag != 0 else prices.get('m_p_brown', 0.15)
-            new_price = prices.get('m_p_brown', 0.15) if household.flag == 0 else prices.get('m_p_green', 0.12)
+            old_price = prices.get('m_p_grey') if household.flag != 0 else prices.get('m_p_brown')
+            new_price = prices.get('m_p_brown') if household.flag == 0 else prices.get('m_p_green')
             switching_benefit = (old_price - new_price) * household.h_q
             household.h_switch = switching_benefit
         

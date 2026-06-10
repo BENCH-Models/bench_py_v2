@@ -20,7 +20,7 @@ sys.path.insert(0, str(project_root))
 from model.bench_model import BENCHModel
 from plotting_outputs import plot_batch_for_config
 from utils.config_loader import load_config_file, normalize_run_config
-from utils.constants import DEFAULT_LEARNING_TYPE, OUTPUT_DIR
+from utils.constants import DEFAULT_LEARNING_TYPE, OUTPUT_DIR, NUMBER_SEED_RUNS, VERBOSE
 
 
 def build_parser():
@@ -49,37 +49,45 @@ def build_parser():
     return parser
 
 
-def run_model(config: dict, base_path: str, output_root: str = None) -> bool:
+def run_model(config: dict, base_path: str, output_root: str = None, seed: int = None) -> bool:
+    # Explicitly ensure that run_label is provided, fallback to configuration metadata if missing
+    label = config.get("run_label")
+    if not label:
+        label = f"{config.get('scenario')}_{config.get('policy')}_{config.get('learning_type')}"
+
     model = BENCHModel(
         case_study=config.get("case_study", "Netherlands-Overijssel"),
         scenario=config.get("scenario", "Ref_SSP2"),
         policy=config.get("policy", "Ref"),
         learning_type=config.get("learning_type", DEFAULT_LEARNING_TYPE),
-        run_label=config.get("run_label"),
+        run_label=label,  # Explicitly pass down the configuration key label
         base_path=base_path,
         output_root=output_root,
+        seed=seed,  # Pass the random seed to BENCHModel
     )
     model.debug = config.get("debug", False)
-
-    print(f"\n=== RUNNING: {model.run_id} ===")
-    success = model.run(verbose=True)
+    
+    if VERBOSE:
+        print(f"\n=== RUNNING: {model.run_id if hasattr(model, 'run_id') else config.get('run_label', label)} (Seed: {seed}) ===")
+    
+    success = model.run()
     if not success:
-        print(f"✗ Run failed: {model.run_id}")
+        print(f"✗ Run failed for seed {seed}")
         return False
 
+    # Get summary safely using the implementation present in BENCHModel or its components
     summary = model.get_summary()
-    print("\nFINAL CUMULATIVE RESULTS:")
-    print("-" * 60)
-    print(f"Total Investment: €{summary['total_investment']:,.2f}")
-    print(f"Total Energy Saved: {summary['total_energy_saved']:,.0f} kWh")
-    print(f"Total Emissions Avoided: {summary['total_emissions_avoided']:,.0f} kg CO2")
-    print(f"Total Actions: {summary['actions_cumulative']:,.0f}")
+    if VERBOSE and summary:
+        print("\nSEED RUN CUMULATIVE RESULTS:")
+        print("-" * 60)
+        print(f"Total Investment: €{summary.get('total_investment', 0):,.2f}")
+        print(f"Total Energy Saved: {summary.get('total_energy_saved', 0):,.0f} kWh")
+        print(f"Total Emissions Avoided: {summary.get('total_emissions_avoided', 0):,.0f} kg CO2")
+        print(f"Total Actions: {summary.get('actions_cumulative', 0):,.0f}")
 
-    print("\nExporting results...")
+        print("\nExporting results...")
+        
     files = model.export_results()
-    #print(f"Results exported to: {model.run_output_dir}")
-    #print(f"Summary files: {len(files)}")
-
     return True
 
 
@@ -93,17 +101,7 @@ def main():
             print(f"No valid configurations found in {args.config_file}")
             return 1
     else:
-        configs = [
-            normalize_run_config({
-                "case_study": "Netherlands-Overijssel",
-                "scenario": "Ref_SSP2",
-                "policy": "Carbon price pressure-100",
-                "learning_type": "Fast adaptation",
-                "debug": args.debug,
-            })
-        ]
-
-
+        raise ValueError("No configuration file provided. Use --config-file to specify a JSON or YAML config.")
 
     batch_output_root = None
     if args.config_file:
@@ -117,11 +115,16 @@ def main():
 
     all_success = True
     for index, config in enumerate(configs, start=1):
-        print(f"\n=== Configuration {index}/{len(configs)} ===")
+        config_label = config.get('run_label', 'Unnamed')
+        print(f"\n=== Configuration {index}/{len(configs)}: {config_label} ===")
         config["debug"] = config.get("debug", args.debug)
-        success = run_model(config, args.base_path, output_root=batch_output_root)
-        if not success:
-            all_success = False
+        
+        # Nested execution loop running NUMBER_SEED_RUNS times for the exact same parameters
+        for seed_idx in range(NUMBER_SEED_RUNS):
+            print(f" -> Executing Seed Run {seed_idx + 1}/{NUMBER_SEED_RUNS} (Seed: {seed_idx})")
+            success = run_model(config, args.base_path, output_root=batch_output_root, seed=seed_idx)
+            if not success:
+                all_success = False
 
     if args.plot:
         if not args.config_file:

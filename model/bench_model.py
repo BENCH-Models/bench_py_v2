@@ -21,7 +21,8 @@ from utils.constants import (
     M_P_GREEN_BASE, M_P_BROWN_BASE, M_P_GREY_BASE, MODEL_START_YEAR, MODEL_END_YEAR,
     INCOME_GROUPS, DWELLING_LABELS,
     FLAG_NAMES, OUTPUT_DIR,
-    DEFAULT_LEARNING_TYPE
+    DEFAULT_LEARNING_TYPE,
+    VERBOSE
 )
 
 
@@ -37,11 +38,16 @@ class BENCHModel:
     - Results tracking and export
     """
     
-    def __init__(self, case_study: str, scenario: str, policy: str,
+    def __init__(self, 
+                 case_study: str, 
+                 scenario: str, 
+                 policy: str,
                  learning_type: str = DEFAULT_LEARNING_TYPE,
                  run_label: str = None,
                  base_path: str = ".",
-                 output_root: str = None):
+                 output_root: str = None,
+                seed: Optional[int] = None
+                 ):
         """
         Initialize BENCH model.
         
@@ -63,17 +69,7 @@ class BENCHModel:
         self.output_root = output_root or os.path.join(self.base_path, OUTPUT_DIR)
         self.run_id = self._generate_run_id()
         self.run_output_dir = os.path.join(self.output_root, self.run_id)
-        self.run_config = {
-            'case_study': self.case_study,
-            'scenario': self.scenario,
-            'policy': self.policy,
-            'learning_type': self.learning_type,
-            'run_label': self.run_label,
-            'run_id': self.run_id,
-            'start_year': MODEL_START_YEAR,
-            'end_year': MODEL_END_YEAR,
-            'output_dir': self.run_output_dir,
-        }
+
         
         # Simulation state
         self.year = MODEL_START_YEAR
@@ -87,7 +83,18 @@ class BENCHModel:
             'm_p_green': M_P_GREEN_BASE,
         }
 
-
+        # --- Set Stochastic Seed ---
+        self.seed = seed
+        if self.seed is not None:
+            random.seed(self.seed)
+            # If you use numpy somewhere, uncomment the line below:
+            # import numpy as np; np.random.seed(self.seed)
+                            
+        # Update output directory to include seed tracking if a label exists
+        if run_label and seed is not None:
+            self.run_label = f"{run_label}_seed_{seed}"
+        elif run_label:
+            self.run_label = run_label
         
         # Components
         self.data_loader = DataLoader(base_path)
@@ -95,11 +102,35 @@ class BENCHModel:
         self.decision_maker = DecisionMaker()
         self.learning_mechanism = LearningMechanism()
         self.statistics = StatisticsAggregator()
+
+
+        # Build distinct output subfolder for this seed
+        actual_output_dir = output_root if output_root else os.path.join(self.base_path, OUTPUT_DIR)
+        if self.run_label:
+            actual_output_dir = os.path.join(actual_output_dir, self.run_label)
+        else:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            actual_output_dir = os.path.join(actual_output_dir, f"run_{timestamp}")
+
         self.exporter = ResultsExporter(output_dir=self.run_output_dir)
         
+        self.run_config = {
+            'case_study': self.case_study,
+            'scenario': self.scenario,
+            'policy': self.policy,
+            'learning_type': self.learning_type,
+            'run_label': self.run_label,
+            'run_id': self.run_id,
+            'start_year': MODEL_START_YEAR,
+            'end_year': MODEL_END_YEAR,
+            'output_dir': self.run_output_dir,
+        }
+
         # Configuration
         self.debug = False
         self.memory_recall = True
+        if VERBOSE:
+            self._print_agent_summary()
     
     def initialize(self) -> bool:
         """
@@ -108,13 +139,14 @@ class BENCHModel:
         Returns:
             True if successful, False otherwise
         """
-        print(f"\n{'='*60}")
-        print("BENCH MODEL INITIALIZATION")
-        print(f"{'='*60}")
-        print(f"Case Study: {self.case_study}")
-        print(f"Scenario: {self.scenario}")
-        print(f"Policy: {self.policy}")
-        print(f"{'='*60}\n")
+        if VERBOSE:
+            print(f"\n{'='*60}")
+            print("BENCH MODEL INITIALIZATION")
+            print(f"{'='*60}")
+            print(f"Case Study: {self.case_study}")
+            print(f"Scenario: {self.scenario}")
+            print(f"Policy: {self.policy}")
+            print(f"{'='*60}\n")
         
         # Load all data
         if not self.data_loader.load_all_data():
@@ -153,18 +185,18 @@ class BENCHModel:
 
             for _, row in household_data.iterrows():
                 # Extract attributes from data
-                h_id = int(row.get('id', len(self.households)))
-                income_group = int(row.get('group id', 1))
-                income = float(row.get('income', 20000))
-                consumption = float(row.get('consumption', 3000))
+                h_id = int(row.get('id'))
+                income_group = int(row.get('group id'))
+                income = float(row.get('income'))
+                consumption = float(row.get('consumption'))
                 
                 # Energy flag: interpret from data
-                energy_flag = int(row.get('lce user?', 0))
+                energy_flag = int(row.get('lce user?'))
                 if energy_flag > 1:
                     energy_flag = 2
                 
-                dwelling_label = int(row.get('dw_el', 3)) if 'dw_el' in row else 3
-                owner = bool(row.get('Owner', True))
+                dwelling_label = int(row.get('dw_el')) if 'dw_el' in row else 3
+                owner = bool(row.get('Owner'))
                 
                 # Convert row to dictionary and pull out what you already handled explicitly, DONT WANT TO PASS THE STUFF THAT IS ALERADY EXTRACTED AS ARGUMENTS TO THE HOUSEHOLD CONSTRUCTOR
                 row_dict = row.to_dict()
@@ -185,27 +217,27 @@ class BENCHModel:
                 
                 # Set initial behavioral attributes if available
                 if 'knowledge' in row or 'know' in row:
-                    household.know = float(row.get('knowledge', row.get('know', 0)))
+                    household.know = float(row.get('knowledge'))
                 if 'cee_aw' in row:
-                    household.cee_aw = float(row.get('cee_aw', 0))
+                    household.cee_aw = float(row.get('cee_aw'))
                 if 'ed_aw' in row:
-                    household.ed_aw = float(row.get('ed_aw', 0))
+                    household.ed_aw = float(row.get('ed_aw'))
                 
                 # Set norms if available
                 if 'personal1' in row:
-                    household.per_nab[0] = float(row.get('personal1', 0))
-                    household.per_nab[1] = float(row.get('personal2', 0)) if 'personal2' in row else 0
-                    household.per_nab[2] = float(row.get('personal3', 0)) if 'personal3' in row else 0
+                    household.per_nab[0] = float(row.get('personal1'))
+                    household.per_nab[1] = float(row.get('personal2')) if 'personal2' in row else 0
+                    household.per_nab[2] = float(row.get('personal3')) if 'personal3' in row else 0
                 
                 if 'social1' in row:
-                    household.su_nor[0] = float(row.get('social1', 0))
-                    household.su_nor[1] = float(row.get('social2', 0)) if 'social2' in row else 0
-                    household.su_nor[2] = float(row.get('social3', 0)) if 'social3' in row else 0
+                    household.su_nor[0] = float(row.get('social1'))
+                    household.su_nor[1] = float(row.get('social2')) if 'social2' in row else 0
+                    household.su_nor[2] = float(row.get('social3')) if 'social3' in row else 0
                 
                 if 'pbc1' in row:
-                    household.pbc[0] = float(row.get('pbc1', 0))
-                    household.pbc[1] = float(row.get('pbc2', 0)) if 'pbc2' in row else 0
-                    household.pbc[2] = float(row.get('pbc3', 0)) if 'pbc3' in row else 0
+                    household.pbc[0] = float(row.get('pbc1'))
+                    household.pbc[1] = float(row.get('pbc2')) if 'pbc2' in row else 0
+                    household.pbc[2] = float(row.get('pbc3')) if 'pbc3' in row else 0
                 
                 # Initial awareness calculation
                 household.update_awareness()
@@ -215,7 +247,8 @@ class BENCHModel:
             
             self.n_households = len(self.households)
             self._place_households_on_grid()
-            print(f"✓ Created {self.n_households} household agents")
+            if VERBOSE:
+                print(f"✓ Created {self.n_households} household agents")
             return True
             
         except Exception as e:
@@ -289,75 +322,57 @@ class BENCHModel:
         print(f"  Average Awareness: {avg_awareness:.2f}")
     
     def step(self) -> bool:
-        """
-        Execute one year of simulation.
-        
-        Returns:
-            True if year completed successfully
-        """
-        if self.year > MODEL_END_YEAR:
-            return False
-        
-        if self.debug:
-            print(f"\n--- Year {self.year} ---")
-        
-        # Recall historical behavior (2015 only)
-        if self.year == MODEL_START_YEAR and self.memory_recall:
-            self._recall_memory()
-        
-        # Update prices based on policy
-        self._update_prices()
-        
-        # For each household: behavioral decision process
-        for household in self.households:
-            # 1. Activate knowledge pathway
-            self.decision_maker.activate_knowledge(household, self.case_study)
+            """Execute one year of simulation."""
+            if self.year > MODEL_END_YEAR:
+                return False
             
-            # 2. Update motivation
-            self.decision_maker.update_motivation(household, self.case_study)
+            if self.year == MODEL_START_YEAR and self.memory_recall:
+                self._recall_memory()
             
-            # 3. Consider constraints
-            for action_type in range(3):
-                self.decision_maker.consider_action(household, action_type)
+            self._update_prices()
             
-            # 4. Calculate budget constraints
-            household.calculate_budgets(self.prices)
+            # --- PASS 1: Update individual attributes and raw budgets ---
+            for household in self.households:
+                self.decision_maker.activate_knowledge(household, self.case_study)
+                self.decision_maker.update_motivation(household, self.case_study)
+                
+                for action_type in range(3):
+                    self.decision_maker.consider_action(household, action_type)
+                
+                # Raw budgets calculated for everyone using current year prices
+                household.calculate_budgets(self.prices)
+                
+            # --- PASS 2: Global Population Normalization (Out of the loop!) ---
+            self.utility_calculator.normalize_budgets(self.households)
             
-            # 5. Normalize budgets across population
-            self.utility_calculator.normalize_budget_values(household)
+            # --- PASS 3: Utility Evaluation & Decision Execution ---
+            for household in self.households:
+                # Normalize this agent's values using the freshly computed global maxes
+                self.utility_calculator.normalize_budget_values(household)
+                
+                # Calculate expected utility profiles
+                self.utility_calculator.calculate_all_utilities(household, {})
+                
+                # Execute choices based on utilities
+                self.decision_maker.decide_action(household, {}, self.utility_calculator)
+                
+                # Post-decision accounting
+                self.decision_maker.calculate_energy_savings(household, self.prices)
+                self.decision_maker.calculate_financial_outcomes(household, self.prices)
+                self.decision_maker.calculate_emissions_avoided(household, self.prices)
+                
+                # Record experienced utility and memorize
+                self.utility_calculator.calculate_actual_utility(household)
+                self.learning_mechanism.update_memory(household, self.year)
             
-            # 6. Calculate utilities
-            self.utility_calculator.calculate_all_utilities(household, {})
+            # --- PASS 4: Social Learning & Aggregation ---
+            self._apply_social_learning()
             
-            # 7. Make decisions
-            self.decision_maker.decide_action(household, {}, self.utility_calculator)
+            stats = self.statistics.aggregate_population_stats(self.households, self.year)
+            self.statistics.store_annual_stats(self.year, stats)
             
-            # 8. Calculate outcomes
-            self.decision_maker.calculate_energy_savings(household, self.prices)
-            self.decision_maker.calculate_financial_outcomes(household, self.prices)
-            self.decision_maker.calculate_emissions_avoided(household, self.prices)
-            
-            # 9. Update actual utility
-            self.utility_calculator.calculate_actual_utility(household)
-            
-            # 10. Learning
-            self.learning_mechanism.update_memory(household, self.year)
-        
-        # 11. Social learning (grid adjacency: each HH learns from direct neighbors)
-        self._apply_social_learning()
-        
-        # 12. Aggregate statistics
-        stats = self.statistics.aggregate_population_stats(self.households, self.year)
-        self.statistics.store_annual_stats(self.year, stats)
-        
-        if self.debug:
-            print(f"  LCE Share: {stats['lce_share_percent']:.1f}%")
-            print(f"  Actions Taken: {stats['action_total_count']}")
-        
-        # Increment time
-        self.year += 1
-        
-        return True
+            self.year += 1
+            return True
     
     def _recall_memory(self) -> None:
         """Apply 2015 memory recall for historical behavior."""
@@ -393,10 +408,14 @@ class BENCHModel:
             carbon_tax_per_kwh_grey = tax_per_kg * EMISSIONS_FACTOR_GRAY
             carbon_tax_per_kwh_brown = tax_per_kg * EMISSIONS_FACTOR_BROWN
 
+
+        
         # 3. Apply final calculated values to the active price variables
         self.prices['m_p_grey'] = M_P_GREY_BASE + carbon_tax_per_kwh_grey
         self.prices['m_p_brown'] = M_P_BROWN_BASE + carbon_tax_per_kwh_brown
         self.prices['m_p_green'] = M_P_GREEN_BASE  # Renewable track avoids emissions penalties
+
+        #print(target_carbon_price_2030, carbon_tax_per_kwh_grey, (carbon_tax_per_kwh_grey/M_P_GREY_BASE)*100)
 
     def _apply_social_learning(self) -> None:
         """Apply the selected learning algorithm to households after 2015."""
@@ -419,7 +438,7 @@ class BENCHModel:
                 self.learning_type
             )
 
-    def run(self, verbose: bool = True) -> bool:
+    def run(self) -> bool:
         """
         Run complete simulation from 2015 to 2030.
         
@@ -433,20 +452,21 @@ class BENCHModel:
             print("✗ Model initialization failed")
             return False
         
-        print(f"{'='*60}")
-        print("SIMULATION RUNNING")
-        print(f"{'='*60}\n")
+        if VERBOSE:
+            print(f"{'='*60}")
+            print("SIMULATION RUNNING")
+            print(f"{'='*60}\n")
         
         while self.year <= MODEL_END_YEAR:
             if not self.step():
                 break
             
-            if verbose and self.year % 5 == 0:
+            if VERBOSE and self.year % 5 == 0:
                 print(f"✓ Year {self.year} completed")
-        
-        print(f"\n{'='*60}")
-        print("SIMULATION COMPLETE")
-        print(f"{'='*60}\n")
+        if VERBOSE:
+            print(f"\n{'='*60}")
+            print("SIMULATION COMPLETE")
+            print(f"{'='*60}\n")
         
         return True
     

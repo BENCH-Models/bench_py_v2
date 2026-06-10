@@ -120,7 +120,7 @@ class LearningMechanism:
             print(f"Warning: No memory rules for income group {income_group}")
             return 
         
-        rules = MEMORY_RULES[income_group].get(energy_flag, {})
+        rules = MEMORY_RULES[income_group].get(energy_flag)
         
         for action_name, (probability, value) in rules.items():
             if random.random() < probability:
