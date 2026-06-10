@@ -174,87 +174,104 @@ class BENCHModel:
         return "_".join(parts)
 
     def _create_agents(self) -> bool:
-        """
-        Create household agents from loaded data.
-        
-        Returns:
-            True if successful
-        """
-        try:
-            household_data = self.data_loader.get_all_households_data()
+            """
+            Create unique household agents using baseline data from 2015.
+            
+            Returns:
+                True if successful, False otherwise
+            """
+            try:
+                # 1. Fetch raw household dataset from the data loader
+                household_data = self.data_loader.get_all_households_data()
 
-            for _, row in household_data.iterrows():
-                # Extract attributes from data
-                h_id = int(row.get('id'))
-                income_group = int(row.get('group id'))
-                income = float(row.get('income'))
-                consumption = float(row.get('consumption'))
-                
-                # Energy flag: interpret from data
-                energy_flag = int(row.get('lce user?'))
-                if energy_flag > 1:
-                    energy_flag = 2
-                
-                dwelling_label = int(row.get('dw_el')) if 'dw_el' in row else 3
-                owner = bool(row.get('Owner'))
-                
-                # Convert row to dictionary and pull out what you already handled explicitly, DONT WANT TO PASS THE STUFF THAT IS ALERADY EXTRACTED AS ARGUMENTS TO THE HOUSEHOLD CONSTRUCTOR
-                row_dict = row.to_dict()
-                for key in ['id', 'group id', 'income', 'consumption', 'lce user?', 'dw_el', 'Owner']:
-                    row_dict.pop(key, None)
+                # 2. Filter down to the baseline year 2015 to ignore future years' evolution data
+                if 'year' in household_data.columns:
+                    household_data = household_data[household_data['year'] == 2015]
+                else:
+                    if VERBOSE:
+                        print("Warning: 'year' column not found in household data. Proceeding with raw data rows.")
+
+                # 3. Ensure absolute uniqueness by dropping duplicate entries for the same agent ID
+                if 'id' in household_data.columns:
+                    initial_count = len(household_data)
+                    household_data = household_data.drop_duplicates(subset=['id'], keep='first')
+                    dropped_count = initial_count - len(household_data)
+                    if dropped_count > 0 and VERBOSE:
+                        print(f"-> Removed {dropped_count} duplicate agent row entries for year 2015.")
+
+                # 4. Iterate over unique baseline household rows to instantiate agents
+                for _, row in household_data.iterrows():
+                    # Extract attributes from data
+                    h_id = int(row.get('id'))
+                    income_group = int(row.get('group id'))
+                    income = float(row.get('income'))
+                    consumption = float(row.get('consumption'))
                     
-                # Create household
-                household = Household(
-                    h_id=h_id,
-                    income_group=income_group,
-                    income=income,
-                    consumption_q=consumption,
-                    energy_flag=energy_flag,
-                    dwelling_label=dwelling_label,
-                    owner=owner,
-                    **row_dict
-                )
+                    # Energy flag: interpret from data
+                    energy_flag = int(row.get('lce user?'))
+                    if energy_flag > 1:
+                        energy_flag = 2
+                    
+                    dwelling_label = int(row.get('dw_el')) if 'dw_el' in row else 3
+                    owner = bool(row.get('Owner'))
+                    
+                    # Convert row to dictionary and pull out what you already handled explicitly
+                    row_dict = row.to_dict()
+                    for key in ['id', 'group id', 'income', 'consumption', 'lce user?', 'dw_el', 'Owner', 'year']:
+                        row_dict.pop(key, None)
+                        
+                    # Create household agent
+                    household = Household(
+                        h_id=h_id,
+                        income_group=income_group,
+                        income=income,
+                        consumption_q=consumption,
+                        energy_flag=energy_flag,
+                        dwelling_label=dwelling_label,
+                        owner=owner,
+                        **row_dict
+                    )
+                    
+                    # Set initial behavioral attributes if available
+                    if 'knowledge' in row or 'know' in row:
+                        household.know = float(row.get('knowledge'))
+                    if 'cee_aw' in row:
+                        household.cee_aw = float(row.get('cee_aw'))
+                    if 'ed_aw' in row:
+                        household.ed_aw = float(row.get('ed_aw'))
+                    
+                    # Set norms if available
+                    if 'personal1' in row:
+                        household.per_nab[0] = float(row.get('personal1'))
+                        household.per_nab[1] = float(row.get('personal2')) if 'personal2' in row else 0
+                        household.per_nab[2] = float(row.get('personal3')) if 'personal3' in row else 0
+                    
+                    if 'social1' in row:
+                        household.su_nor[0] = float(row.get('social1'))
+                        household.su_nor[1] = float(row.get('social2')) if 'social2' in row else 0
+                        household.su_nor[2] = float(row.get('social3')) if 'social3' in row else 0
+                    
+                    if 'pbc1' in row:
+                        household.pbc[0] = float(row.get('pbc1'))
+                        household.pbc[1] = float(row.get('pbc2')) if 'pbc2' in row else 0
+                        household.pbc[2] = float(row.get('pbc3')) if 'pbc3' in row else 0
+                    
+                    # Initial awareness and motivation calculations
+                    household.update_awareness()
+                    household.update_motivation(self.case_study)
+                    
+                    self.households.append(household)
                 
-                # Set initial behavioral attributes if available
-                if 'knowledge' in row or 'know' in row:
-                    household.know = float(row.get('knowledge'))
-                if 'cee_aw' in row:
-                    household.cee_aw = float(row.get('cee_aw'))
-                if 'ed_aw' in row:
-                    household.ed_aw = float(row.get('ed_aw'))
+                self.n_households = len(self.households)
+                self._place_households_on_grid()
+                if VERBOSE:
+                    print(f"✓ Created {self.n_households} unique household agents from Year 2015 baseline.")
+                return True
                 
-                # Set norms if available
-                if 'personal1' in row:
-                    household.per_nab[0] = float(row.get('personal1'))
-                    household.per_nab[1] = float(row.get('personal2')) if 'personal2' in row else 0
-                    household.per_nab[2] = float(row.get('personal3')) if 'personal3' in row else 0
-                
-                if 'social1' in row:
-                    household.su_nor[0] = float(row.get('social1'))
-                    household.su_nor[1] = float(row.get('social2')) if 'social2' in row else 0
-                    household.su_nor[2] = float(row.get('social3')) if 'social3' in row else 0
-                
-                if 'pbc1' in row:
-                    household.pbc[0] = float(row.get('pbc1'))
-                    household.pbc[1] = float(row.get('pbc2')) if 'pbc2' in row else 0
-                    household.pbc[2] = float(row.get('pbc3')) if 'pbc3' in row else 0
-                
-                # Initial awareness calculation
-                household.update_awareness()
-                household.update_motivation(self.case_study)
-                
-                self.households.append(household)
-            
-            self.n_households = len(self.households)
-            self._place_households_on_grid()
-            if VERBOSE:
-                print(f"✓ Created {self.n_households} household agents")
-            return True
-            
-        except Exception as e:
-            print(f"✗ Error creating agents: {e}")
-            return False
-    
+            except Exception as e:
+                print(f"✗ Error creating agents: {e}")
+                return False
+        
     def _place_households_on_grid(self) -> None:
         """Place households onto a rectangular grid and index their neighbors."""
         if self.n_households == 0:
@@ -463,6 +480,7 @@ class BENCHModel:
             
             if VERBOSE and self.year % 5 == 0:
                 print(f"✓ Year {self.year} completed")
+
         if VERBOSE:
             print(f"\n{'='*60}")
             print("SIMULATION COMPLETE")
