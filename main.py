@@ -69,19 +69,20 @@ def run_single_job(config: dict, base_path: str, batch_output_root: str, seed: i
 
     try:
         model = BENCHModel(
-            case_study=config.get("case_study", "Netherlands-Overijssel"),
-            scenario=config.get("scenario", "Ref_SSP2"),
-            policy=config.get("policy", "Ref"),
-            learning_type=config.get("learning_type", DEFAULT_LEARNING_TYPE),
-            run_label=unique_parallel_label,  # Pass seed-isolated path label down
+            case_study=config.get("case_study"),
+            scenario=config.get("scenario"),
+            policy=config.get("policy"),
+            learning_type=config.get("learning_type"),
+            run_label=unique_parallel_label,
             base_path=base_path,
             output_root=batch_output_root,
-            seed=seed,  # Pass the random seed to BENCHModel
+            seed=seed,
+            carbon_price_awareness=config.get("carbon_price_awareness") 
         )
         model.debug = config.get("debug", False)
         
         # Run silently to avoid scrambled multi-core print overlapping
-        success = model.run(verbose=False) if hasattr(model, 'run') and 'verbose' in model.run.__code__.co_varnames else model.run()
+        success = model.run()
         if not success:
             print(f"✗ Run failed for config '{base_label}' on seed {seed}")
             return False

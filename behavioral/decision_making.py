@@ -62,7 +62,73 @@ class DecisionMaker:
         """
         household.consider_constraints(action_name)
 
-    
+    def apply_carbon_price_awareness(self, household, policy: str, year: int) -> None:
+        """Apply carbon price awareness effects (NetLogo's cpinfo)."""
+        if year < 2016:
+            return
+        
+        # Skip if policy is "Ref" (no carbon price)
+        if policy == "Ref":
+            return
+        
+        # Handle different carbon price policies
+        if policy == "Carbon price pressure-10":
+            if household.know < 6.5:
+                household.know = min(household.know * 1.01, BEHAVIORAL_SCALE_MAX)
+            if household.cee_aw < 6.5:
+                household.cee_aw = min(household.cee_aw * 1.01, BEHAVIORAL_SCALE_MAX)
+            if household.ed_aw < 6.5:
+                household.ed_aw = min(household.ed_aw * 1.01, BEHAVIORAL_SCALE_MAX)
+            household.update_awareness()
+            
+        elif policy == "Carbon price pressure-25":
+            if household.know < 6.5:
+                household.know = min(household.know * 1.02, BEHAVIORAL_SCALE_MAX)
+            if household.cee_aw < 6.5:
+                household.cee_aw = min(household.cee_aw * 1.02, BEHAVIORAL_SCALE_MAX)
+            if household.ed_aw < 6.5:
+                household.ed_aw = min(household.ed_aw * 1.02, BEHAVIORAL_SCALE_MAX)
+            household.update_awareness()
+            
+            for action in ['investment', 'conservation', 'switching']:
+                if household.su_nor[action] < 6.5:
+                    household.su_nor[action] = min(household.su_nor[action] * 1.04, BEHAVIORAL_SCALE_MAX)
+                if household.pbc[action] < 6.5:
+                    household.pbc[action] = min(household.pbc[action] * 1.03, BEHAVIORAL_SCALE_MAX)
+                    
+        elif policy == "Carbon price pressure-50":
+            if household.know < 6.5:
+                household.know = min(household.know * 1.04, BEHAVIORAL_SCALE_MAX)
+            if household.cee_aw < 6.5:
+                household.cee_aw = min(household.cee_aw * 1.04, BEHAVIORAL_SCALE_MAX)
+            if household.ed_aw < 6.5:
+                household.ed_aw = min(household.ed_aw * 1.04, BEHAVIORAL_SCALE_MAX)
+            household.update_awareness()
+            
+            for action in ['investment', 'conservation', 'switching']:
+                if household.su_nor[action] < 6.5:
+                    household.su_nor[action] = min(household.su_nor[action] * 1.06, BEHAVIORAL_SCALE_MAX)
+                if household.pbc[action] < 6.5:
+                    household.pbc[action] = min(household.pbc[action] * 1.04, BEHAVIORAL_SCALE_MAX)
+                    
+        elif policy == "Carbon price pressure-100":
+            if household.know < 6.5:
+                household.know = min(household.know * 1.06, BEHAVIORAL_SCALE_MAX)
+            if household.cee_aw < 6.5:
+                household.cee_aw = min(household.cee_aw * 1.06, BEHAVIORAL_SCALE_MAX)
+            if household.ed_aw < 6.5:
+                household.ed_aw = min(household.ed_aw * 1.06, BEHAVIORAL_SCALE_MAX)
+            household.update_awareness()
+            
+            for action in ['investment', 'conservation', 'switching']:
+                if household.su_nor[action] < 6.5:
+                    household.su_nor[action] = min(household.su_nor[action] * 1.10, BEHAVIORAL_SCALE_MAX)
+                if household.pbc[action] < 6.5:
+                    household.pbc[action] = min(household.pbc[action] * 1.05, BEHAVIORAL_SCALE_MAX)
+        
+        # Note: "Carbon price pressure-2020" would go here if needed
+
+
     def decide_action(self, household, market_state: Dict, utility_calculator) -> List[bool]:
         """
         Make action decision based on utilities and thresholds.
@@ -228,15 +294,6 @@ class DecisionMaker:
     def calculate_emissions_avoided(self, household, prices: Dict[str, float]) -> float:
         """
         Calculate CO2 emissions avoided by actions.
-        
-        Conversion: ~0.5 kg CO2 per kWh of fossil fuel electricity
-        
-        Args:
-            household: Household object
-            prices: Dictionary with market info
-            
-        Returns:
-            Total CO2 avoided (kg)
         """
         co2_factor = 0.5  # kg CO2 per kWh of FF electricity
         emissions_avoided = 0.0
@@ -265,43 +322,9 @@ class DecisionMaker:
         
         # Switching to renewable
         if household.act3 or household.act31 or household.act32:
-            # Avoid emissions for entire consumption switched to renewable
             saved = household.h_q * co2_factor
             emissions_avoided += saved
             household.em_avoided['switching'] += saved
         
         return emissions_avoided
-        """
-        Calculate CO2 emissions avoided by actions.
-        
-        Conversion: ~0.5 kg CO2 per kWh of fossil fuel electricity
-        
-        Args:
-            household: Household object
-            prices: Dictionary with market info
-            
-        Returns:
-            Total CO2 avoided (kg)
-        """
-        co2_factor = 0.5  # kg CO2 per kWh of FF electricity
-        emissions_avoided = 0.0
-        
-        # Investment savings
-        if household.act1 or household.act11 or household.act12:
-            emissions_avoided += INVESTMENT_PV_ENERGY_OUTPUT * co2_factor
-            household.em_avoided[0] += INVESTMENT_PV_ENERGY_OUTPUT * co2_factor
-        
-        # Conservation savings (only if was on FF before)
-        if household.act2 or household.act21 or household.act40:
-            if household.flag == 0:  # Currently on FF
-                conservation_amount = household.h_q * CONSERVATION_RATE
-                emissions_avoided += conservation_amount * co2_factor
-                household.em_avoided[1] += conservation_amount * co2_factor
-        
-        # Switching to renewable
-        if household.act3 or household.act31 or household.act32:
-            # Avoid emissions for entire consumption switched to renewable
-            emissions_avoided += household.h_q * co2_factor
-            household.em_avoided[2] += household.h_q * co2_factor
-        
-        return emissions_avoided
+        # DELETE EVERYTHING AFTER THIS LINE - there's duplicate old code

@@ -16,13 +16,16 @@ from behavioral.decision_making import DecisionMaker
 from behavioral.learning import LearningMechanism
 from utils.statistics import StatisticsAggregator
 from utils.output import ResultsExporter
+import pandas as pd
 from utils.constants import (
     CARBON_POLICY_TARGETS, EMISSIONS_FACTOR_GRAY, EMISSIONS_FACTOR_BROWN, EMISSIONS_FACTOR_GREEN, KG_TO_TONS,
     M_P_GREEN_BASE, M_P_BROWN_BASE, M_P_GREY_BASE, MODEL_START_YEAR, MODEL_END_YEAR,
     INCOME_GROUPS, DWELLING_LABELS,
     FLAG_NAMES, OUTPUT_DIR,
     DEFAULT_LEARNING_TYPE,
-    VERBOSE
+    VERBOSE,
+    INVESTMENT_PV_ENERGY_OUTPUT,
+    PRIMES_NL_PRICES_FILE
 )
 
 
@@ -46,7 +49,8 @@ class BENCHModel:
                  run_label: str = None,
                  base_path: str = ".",
                  output_root: str = None,
-                seed: Optional[int] = None
+                seed: Optional[int] = None,
+                carbon_price_awareness: bool = True
                  ):
         """
         Initialize BENCH model.
@@ -69,7 +73,7 @@ class BENCHModel:
         self.output_root = output_root or os.path.join(self.base_path, OUTPUT_DIR)
         self.run_id = self._generate_run_id()
         self.run_output_dir = os.path.join(self.output_root, self.run_id)
-
+        self.carbon_price_awareness = carbon_price_awareness 
         
         # Simulation state
         self.year = MODEL_START_YEAR
@@ -77,6 +81,9 @@ class BENCHModel:
         self.n_households = 0
         
         # Market state initially
+            # Load price trajectories
+        self.price_trajectories = {}
+        self._load_price_trajectories()
         self.prices = {
             'm_p_grey': M_P_GREY_BASE,
             'm_p_brown': M_P_BROWN_BASE,
@@ -174,120 +181,124 @@ class BENCHModel:
         return "_".join(parts)
     
     def _create_agents(self) -> bool:
-            """
-            Create unique household agents using baseline data from 2015 and
-            attach their multi-year income time series.
-            
-            Returns:
-                True if successful, False otherwise
-            """
-            try:
-                # 1. Fetch raw household dataset containing all years from the data loader
-                raw_household_data = self.data_loader.get_all_households_data()
+        """
+        Create unique household agents using baseline data from 2015 and
+        attach their multi-year income time series.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # 1. Fetch raw household dataset containing all years from the data loader
+            raw_household_data = self.data_loader.get_all_households_data()
 
-                income_time_series_map = {}
-                if 'id' in raw_household_data.columns and 'year' in raw_household_data.columns and 'income' in raw_household_data.columns:
-                    # Group by 'id' to isolate each unique agent's trajectory rows
-                    for agent_id, group in raw_household_data.groupby('id'):
-                        # Create a dictionary mapping { year: income } for this specific individual agent
-                        income_time_series_map[int(agent_id)] = dict(
-                            zip(group['year'].astype(int), group['income'].astype(float))
-                        )
-                else:
-                    if VERBOSE:
-                        print("Warning: Missing 'id', 'year', or 'income' columns. Cannot build individual time series.")
-
-                # 2. Filter down to the baseline year 2015 to isolate initialization data
-                if 'year' in raw_household_data.columns:
-                    household_data = raw_household_data[raw_household_data['year'] == 2015]
-                else:
-                    household_data = raw_household_data
-                    if VERBOSE:
-                        print("Warning: 'year' column not found in household data. Proceeding with raw data rows.")
-
-                # 3. Ensure absolute uniqueness by dropping duplicate entries for the same agent ID in 2015
-                if 'id' in household_data.columns:
-                    initial_count = len(household_data)
-                    household_data = household_data.drop_duplicates(subset=['id'], keep='first')
-                    dropped_count = initial_count - len(household_data)
-                    if dropped_count > 0 and VERBOSE:
-                        print(f"-> Removed {dropped_count} duplicate agent row entries for year 2015.")
-
-                # 4. Iterate over unique baseline household rows to instantiate agents
-                for _, row in household_data.iterrows():
-                    # Extract attributes from data
-                    h_id = int(row.get('id'))
-                    income_group = int(row.get('group id'))
-                    income = float(row.get('income'))
-                    consumption = float(row.get('consumption'))
-                    
-                    # Energy flag: interpret from data
-                    energy_flag = int(row.get('lce user?'))
-                    if energy_flag > 1:
-                        energy_flag = 2
-                    
-                    dwelling_label = int(row.get('dw_el')) if 'dw_el' in row else 3
-                    owner = bool(row.get('Owner'))
-                    
-                    # Convert row to dictionary and pull out what you already handled explicitly
-                    row_dict = row.to_dict()
-                    for key in ['id', 'group id', 'income', 'consumption', 'lce user?', 'dw_el', 'Owner', 'year']:
-                        row_dict.pop(key, None)
-                        
-                    # Create household agent
-                    household = Household(
-                        h_id=h_id,
-                        income_group=income_group,
-                        income=income,
-                        consumption_q=consumption,
-                        energy_flag=energy_flag,
-                        dwelling_label=dwelling_label,
-                        owner=owner,
-                        **row_dict
+            income_time_series_map = {}
+            if 'id' in raw_household_data.columns and 'year' in raw_household_data.columns and 'income' in raw_household_data.columns:
+                # Group by 'id' to isolate each unique agent's trajectory rows
+                for agent_id, group in raw_household_data.groupby('id'):
+                    # Create a dictionary mapping { year: income } for this specific individual agent
+                    income_time_series_map[int(agent_id)] = dict(
+                        zip(group['year'].astype(int), group['income'].astype(float))
                     )
-                    
-                    # This attaches a .income_trajectory dictionary attribute to the agent: e.g., {2015: 40810.0, 2016: 42000.0, ...}
-                    household.income_trajectory = income_time_series_map.get(h_id, {2015: income})
-                    
-                    # Set initial behavioral attributes if available
-                    if 'knowledge' in row or 'know' in row:
-                        household.know = float(row.get('knowledge'))
-                    if 'cee_aw' in row:
-                        household.cee_aw = float(row.get('cee_aw'))
-                    if 'ed_aw' in row:
-                        household.ed_aw = float(row.get('ed_aw'))
-                    
-                    # Set norms if available
-                    if 'personal1' in row:
-                        household.per_nab[0] = float(row.get('personal1'))
-                        household.per_nab[1] = float(row.get('personal2')) if 'personal2' in row else 0
-                        household.per_nab[2] = float(row.get('personal3')) if 'personal3' in row else 0
-                    
-                    if 'social1' in row:
-                        household.su_nor[0] = float(row.get('social1'))
-                        household.su_nor[1] = float(row.get('social2')) if 'social2' in row else 0
-                        household.su_nor[2] = float(row.get('social3')) if 'social3' in row else 0
-                    
-                    if 'pbc1' in row:
-                        household.pbc[0] = float(row.get('pbc1'))
-                        household.pbc[1] = float(row.get('pbc2')) if 'pbc2' in row else 0
-                        household.pbc[2] = float(row.get('pbc3')) if 'pbc3' in row else 0
-                    
-                    # Initial awareness and motivation calculations
-                    household.update_awareness()
-                    household.update_motivation(self.case_study)
-                    
-                    self.households.append(household)
-                
-                self.n_households = len(self.households)
-                self._place_households_on_grid()
+            else:
                 if VERBOSE:
-                    print(f"✓ Created {self.n_households} unique household agents from Year 2015 baseline with complete historical income trajectories.")
-                return True
+                    print("Warning: Missing 'id', 'year', or 'income' columns. Cannot build individual time series.")
+
+            # 2. Filter down to the baseline year 2015 to isolate initialization data
+            if 'year' in raw_household_data.columns:
+                household_data = raw_household_data[raw_household_data['year'] == 2015]
+            else:
+                household_data = raw_household_data
+                if VERBOSE:
+                    print("Warning: 'year' column not found in household data. Proceeding with raw data rows.")
+
+            # 3. Ensure absolute uniqueness by dropping duplicate entries for the same agent ID in 2015
+            if 'id' in household_data.columns:
+                initial_count = len(household_data)
+                household_data = household_data.drop_duplicates(subset=['id'], keep='first')
+                dropped_count = initial_count - len(household_data)
+                if dropped_count > 0 and VERBOSE:
+                    print(f"-> Removed {dropped_count} duplicate agent row entries for year 2015.")
+
+            # 4. Iterate over unique baseline household rows to instantiate agents
+            for _, row in household_data.iterrows():
+                # Extract attributes from data
+                h_id = int(row.get('id'))
+                income_group = int(row.get('group id'))
+                income = float(row.get('income'))
+                consumption = float(row.get('consumption'))
                 
-            except Exception as e:
-                print(f"✗ Error creating agents: {e}")
-                return False
+                # Energy flag: interpret from data
+                energy_flag = int(row.get('lce user?'))
+                if energy_flag > 1:
+                    energy_flag = 2
+                
+                dwelling_label = int(row.get('dw_el')) if 'dw_el' in row else 3
+                owner = bool(row.get('Owner'))
+                
+                # Convert row to dictionary and pull out what you already handled explicitly
+                row_dict = row.to_dict()
+                for key in ['id', 'group id', 'income', 'consumption', 'lce user?', 'dw_el', 'Owner', 'year']:
+                    row_dict.pop(key, None)
+                    
+                # Create household agent
+                household = Household(
+                    h_id=h_id,
+                    income_group=income_group,
+                    income=income,
+                    consumption_q=consumption,
+                    energy_flag=energy_flag,
+                    dwelling_label=dwelling_label,
+                    owner=owner,
+                    **row_dict
+                )
+                
+                # This attaches a .income_trajectory dictionary attribute to the agent: e.g., {2015: 40810.0, 2016: 42000.0, ...}
+                household.income_trajectory = income_time_series_map.get(h_id, {2015: income})
+                
+                # Set initial behavioral attributes if available
+                if 'knowledge' in row or 'know' in row:
+                    household.know = float(row.get('knowledge'))
+                if 'cee_aw' in row:
+                    household.cee_aw = float(row.get('cee_aw'))
+                if 'ed_aw' in row:
+                    household.ed_aw = float(row.get('ed_aw'))
+                
+                # Set norms if available - USE DICTIONARY ACCESS
+                if 'personal1' in row:
+                    household.per_nab['investment'] = float(row.get('personal1'))
+                    household.per_nab['conservation'] = float(row.get('personal2')) if 'personal2' in row else 0
+                    household.per_nab['switching'] = float(row.get('personal3')) if 'personal3' in row else 0
+
+                if 'social1' in row:
+                    household.su_nor['investment'] = float(row.get('social1'))
+                    household.su_nor['conservation'] = float(row.get('social2')) if 'social2' in row else 0
+                    household.su_nor['switching'] = float(row.get('social3')) if 'social3' in row else 0
+
+                if 'pbc1' in row:
+                    household.pbc['investment'] = float(row.get('pbc1'))
+                    household.pbc['conservation'] = float(row.get('pbc2')) if 'pbc2' in row else 0
+                    household.pbc['switching'] = float(row.get('pbc3')) if 'pbc3' in row else 0
+
+                # Also add ep if available
+                if 'ep' in row:
+                    household.ep = float(row.get('ep'))
+                
+                # Initial awareness and motivation calculations
+                household.update_awareness()
+                household.update_motivation(self.case_study)
+                
+                self.households.append(household)
+            
+            self.n_households = len(self.households)
+            self._place_households_on_grid()
+            if VERBOSE:
+                print(f"✓ Created {self.n_households} unique household agents from Year 2015 baseline with complete historical income trajectories.")
+            return True
+            
+        except Exception as e:
+            print(f"✗ Error creating agents: {e}")
+            return False
         
     def _place_households_on_grid(self) -> None:
         """Place households onto a rectangular grid and index their neighbors."""
@@ -365,14 +376,21 @@ class BENCHModel:
         
         self._update_prices()
         
+        # ADD THIS - Apply carbon price awareness (cpinfo)
+        if self.carbon_price_awareness and self.year >= 2016:
+            for household in self.households:
+                self.decision_maker.apply_carbon_price_awareness(household, self.policy, self.year)
+
         # --- PASS 1: Update individual attributes and raw budgets ---
         for household in self.households:
             household.set_income_for_year(self.year)
             self.decision_maker.activate_knowledge(household, self.case_study)
             self.decision_maker.update_motivation(household, self.case_study)
             
+            # Pass energy patterns for conservation consideration
             for action_name in ['investment', 'conservation', 'switching']:
-                self.decision_maker.consider_action(household, action_name)
+                ep = getattr(household, 'ep', None) if action_name == 'conservation' else None
+                household.consider_constraints(action_name, ep)
             
             household.calculate_budgets(self.prices)
             
@@ -399,11 +417,18 @@ class BENCHModel:
             self.utility_calculator.calculate_actual_utility(household)
             self.learning_mechanism.update_memory(household, self.year)
         
-        # --- PASS 4: Social Learning & Aggregation ---
-        self._apply_social_learning()
+        # AFTER all utility calculations and decisions, update consumption
+        self._update_energy_consumption()
         
         stats = self.statistics.aggregate_population_stats(self.households, self.year)
         self.statistics.store_annual_stats(self.year, stats)
+        #record before the social learning step to capture the direct effect of individual decision-making without social influence confounding it
+
+        # --- PASS 4: Social Learning & Aggregation ---
+        self._apply_social_learning()
+
+        # Reset annual action flags for next year
+        self._reset_annual_actions()
         
         self.year += 1
         return True
@@ -416,38 +441,60 @@ class BENCHModel:
                 household.flag, self.case_study
             )
 
-    def _update_prices(self) -> None:
-        """
-        Update market electricity prices dynamically based on the active policy scenario.
-        Extracts target carbon values using a clean constant dictionary mapping lookup.
-        """
-        # 1. Direct dictionary key resolution with a safe fallback default (0.0 for Ref/unknown)
-        target_carbon_price_2030 = CARBON_POLICY_TARGETS.get(self.policy, 0.0)
+    
+    def _load_price_trajectories(self) -> None:
+        """Load price trajectories from data files."""
+        file_path = os.path.join(self.base_path, PRIMES_NL_PRICES_FILE)
+        
+        if not os.path.exists(file_path):
+            print(f"Warning: Price file not found: {file_path}")
+            return
+        
+        df = pd.read_csv(file_path, header=None)
+        
+        # Store prices for each year and policy
+        self.price_trajectories = {}
+        
+        for year_idx, year in enumerate(range(2015, 2031)):
+            if year_idx >= len(df):
+                break
                 
-        # 2. Compute the Carbon Tax Trajectory over our linear timeline window
-        carbon_tax_per_kwh_grey = 0.0
-        carbon_tax_per_kwh_brown = 0.0
-        current_tax_per_ton = 0.0
-
-        if self.year >= 2017 and target_carbon_price_2030 > 0.0:
-            # Freeze the tax progression timeline at the year 2030 ceiling boundary
-            tax_year = min(self.year, 2030)
+            self.price_trajectories[year] = {}
             
-            # Calculate linear step fraction scaling from 2017 to 2030
-            progression = (tax_year - 2017) / (2030 - 2017)
-            current_tax_per_ton = target_carbon_price_2030 * progression
-            
-            # Convert €/ton to €/kWh:
-            tax_per_kg = current_tax_per_ton * KG_TO_TONS
-            carbon_tax_per_kwh_grey = tax_per_kg * EMISSIONS_FACTOR_GRAY
-            carbon_tax_per_kwh_brown = tax_per_kg * EMISSIONS_FACTOR_BROWN
+            if self.policy == "Ref":
+                self.price_trajectories[year]['m_p_grey'] = df.iloc[year_idx, 0]
+                self.price_trajectories[year]['m_p_brown'] = df.iloc[year_idx, 0]
+                self.price_trajectories[year]['m_p_green'] = df.iloc[year_idx, 0]
+                
+            elif self.policy == "Carbon price pressure-10":
+                self.price_trajectories[year]['m_p_brown'] = df.iloc[year_idx, 1]
+                self.price_trajectories[year]['m_p_grey'] = df.iloc[year_idx, 2]
+                self.price_trajectories[year]['m_p_green'] = M_P_GREEN_BASE
+                
+            elif self.policy == "Carbon price pressure-25":
+                self.price_trajectories[year]['m_p_brown'] = df.iloc[year_idx, 3]
+                self.price_trajectories[year]['m_p_grey'] = df.iloc[year_idx, 4]
+                self.price_trajectories[year]['m_p_green'] = M_P_GREEN_BASE
+                
+            elif self.policy == "Carbon price pressure-50":
+                self.price_trajectories[year]['m_p_brown'] = df.iloc[year_idx, 5]
+                self.price_trajectories[year]['m_p_grey'] = df.iloc[year_idx, 6]
+                self.price_trajectories[year]['m_p_green'] = M_P_GREEN_BASE
+                
+            elif self.policy == "Carbon price pressure-100":
+                self.price_trajectories[year]['m_p_brown'] = df.iloc[year_idx, 7]
+                self.price_trajectories[year]['m_p_grey'] = df.iloc[year_idx, 8]
+                self.price_trajectories[year]['m_p_green'] = M_P_GREEN_BASE
+                
+            elif self.policy == "Carbon price pressure-2020":
+                self.price_trajectories[year]['m_p_brown'] = df.iloc[year_idx, 9]
+                self.price_trajectories[year]['m_p_grey'] = df.iloc[year_idx, 10]
+                self.price_trajectories[year]['m_p_green'] = M_P_GREEN_BASE
 
-        # 3. Apply final calculated values to the active price variables
-        self.prices['m_p_grey'] = M_P_GREY_BASE + carbon_tax_per_kwh_grey
-        self.prices['m_p_brown'] = M_P_BROWN_BASE + carbon_tax_per_kwh_brown
-        self.prices['m_p_green'] = M_P_GREEN_BASE  # Renewable track avoids emissions penalties
-
-        #print(target_carbon_price_2030, carbon_tax_per_kwh_grey, (carbon_tax_per_kwh_grey/M_P_GREY_BASE)*100)
+    def _update_prices(self) -> None:
+        """Update market electricity prices from PRIMES trajectories."""
+        if self.year in self.price_trajectories:
+            self.prices = self.price_trajectories[self.year].copy()
 
     def _apply_social_learning(self) -> None:
         """Apply the selected learning algorithm to households after 2015."""
@@ -469,6 +516,28 @@ class BENCHModel:
                 self.year,
                 self.learning_type
             )
+
+    def _update_energy_consumption(self) -> None:
+        """Update household energy consumption based on actions taken (NetLogo's update_heq)."""
+        for household in self.households:
+            if household.act1 and household.h_q > 0:
+                household.h_q = max(0, household.h_q - INVESTMENT_PV_ENERGY_OUTPUT)
+                if household.h_q <= 0:
+                    household.hh_sta = "self-producer"
+            
+            if household.act50 and household.h_q > 1000:
+                household.h_q = max(1000, household.h_q - household.h_conserv)
+            elif household.act50 and household.h_q <= 1000:
+                household.hh_sta = "efficient"
+                household.h_q = 1000
+
+    def _reset_annual_actions(self) -> None:
+        """Reset annual action flags (NetLogo's update_memory reset)."""
+        for household in self.households:
+            household.act1 = False
+            household.act2 = False  
+            household.act3 = False
+            # Don't reset act11, act12, etc. - those are permanent records
 
     def run(self) -> bool:
         """

@@ -49,17 +49,11 @@ class ResultsExporter:
                                 filename: str = "annual_aggregates.csv") -> str:
         """
         Export annual population-level statistics.
-        
-        Args:
-            stats_aggregator: StatisticsAggregator instance
-            start_year: First year to export
-            end_year: Last year to export
-            filename: Output filename
-            
-        Returns:
-            Path to saved file
         """
         output_path = os.path.join(self.output_dir, filename)
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         rows = []
         for year in range(start_year, end_year + 1):
@@ -72,7 +66,6 @@ class ResultsExporter:
         
         df = pd.DataFrame(rows)
         df.to_csv(output_path, index=False)
-        #print(f"✓ Exported annual aggregates: {output_path}")
         
         return output_path
     
@@ -234,8 +227,8 @@ class ResultsExporter:
         return output_paths
     
     def export_trajectory(self, stats_aggregator, variable: str,
-                         start_year: int, end_year: int,
-                         filename: str = None) -> str:
+                        start_year: int, end_year: int,
+                        filename: str = None) -> str:
         """
         Export time series for a specific variable.
         
@@ -254,6 +247,9 @@ class ResultsExporter:
         
         output_path = os.path.join(self.output_dir, filename)
         
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
         trajectory = stats_aggregator.get_trajectory(variable, start_year, end_year)
         
         with open(output_path, 'w', newline='') as f:
@@ -262,7 +258,6 @@ class ResultsExporter:
             for year, value in trajectory:
                 writer.writerow([year, value])
         
-        #print(f"✓ Exported trajectory: {output_path}")
         return output_path
     
     def export_all_results(self, model, start_year: int, end_year: int) -> List[str]:

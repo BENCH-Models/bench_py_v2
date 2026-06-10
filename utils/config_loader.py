@@ -69,6 +69,10 @@ def normalize_run_config(config: Dict[str, Any]) -> Dict[str, Any]:
     normalized['run_label'] = normalized.get('run_label')
     normalized['debug'] = normalized.get('debug')
 
+    # ADD THIS - Carbon price awareness flag (default to True)
+    normalized['carbon_price_awareness'] = normalized.get('carbon_price_awareness', True)
+
+
     # Keep values even if not in known lists so experiments can use custom labels.
     if normalized['case_study'] not in CASE_STUDIES:
         print(f"Warning: using unknown case_study '{normalized['case_study']}'")

@@ -8,7 +8,6 @@
   run_label: Baseline_NoCP
   carbon_price_awareness: True
   
-
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
   policy: Carbon price pressure-10
@@ -18,14 +17,21 @@
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
-  policy: Carbon price pressure-25
+  policy: Carbon price pressure-100
   learning_type: Fast adaptation
-  run_label: FDC25
+  run_label: FDC100
   carbon_price_awareness: True
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
-  policy: Carbon price pressure-50
+  policy: Carbon price pressure-10
   learning_type: Fast adaptation
-  run_label: FDC50
-  carbon_price_awareness: True
+  run_label: FDC10_unaware
+  carbon_price_awareness: False
+
+- case_study: Netherlands-Overijssel
+  scenario: Ref_SSP2
+  policy: Carbon price pressure-100
+  learning_type: Fast adaptation
+  run_label: FDC100_unaware
+  carbon_price_awareness: False

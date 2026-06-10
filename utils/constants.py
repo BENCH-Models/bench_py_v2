@@ -68,16 +68,14 @@ POLICIES = [
     "Carbon price pressure-25",
     "Carbon price pressure-50",
     "Carbon price pressure-100",
-    "Carbon price pressure-2020"
 ]
 CARBON_POLICY_TARGETS = {
     "Ref": 0.0,
     "Carbon price pressure-10": 10.0,
     "Carbon price pressure-25": 25.0,
     "Carbon price pressure-50": 50.0,
-    "Carbon price pressure-100": 100.0,
+    "Carbon price pressure-100": 100.0
 }
-
 
 # Emission factors by electricity source
 EMISSIONS_FACTOR_GRAY = 0.5   # kg CO2 per kWh for gray electricity

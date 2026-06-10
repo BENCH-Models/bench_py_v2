@@ -101,6 +101,67 @@ class DataLoader:
         
         self.prices_df = df
         self.loaded_files['prices'] = file_path
+
+    def load_price_trajectories(self) -> Dict:
+        """Load price trajectories from PRIMES data."""
+        file_path = os.path.join(self.base_path, PRIMES_NL_PRICES_FILE)
+        
+        if not os.path.exists(file_path):
+            print(f"Warning: Price file not found: {file_path}")
+            return {}
+        
+        df = pd.read_csv(file_path, header=None)
+        
+        # Structure: rows = years, columns = different policy scenarios
+        # Based on NetLogo indices:
+        # Column 0: Ref prices (grey = brown = green)
+        # Column 1-2: Carbon price 10 (brown, grey)
+        # Column 3-4: Carbon price 25 (brown, grey)
+        # Column 5-6: Carbon price 50 (brown, grey)
+        # Column 7-8: Carbon price 100 (brown, grey)
+        # Column 9-10: Carbon price 2020 (brown, grey)
+        
+        price_data = {
+            'Ref': {'grey': [], 'brown': [], 'green': []},
+            'Carbon price pressure-10': {'grey': [], 'brown': [], 'green': []},
+            'Carbon price pressure-25': {'grey': [], 'brown': [], 'green': []},
+            'Carbon price pressure-50': {'grey': [], 'brown': [], 'green': []},
+            'Carbon price pressure-100': {'grey': [], 'brown': [], 'green': []},
+            'Carbon price pressure-2020': {'grey': [], 'brown': [], 'green': []},
+        }
+        
+        for year_idx in range(len(df)):
+            # Ref scenario (all equal)
+            price_data['Ref']['grey'].append(df.iloc[year_idx, 0])
+            price_data['Ref']['brown'].append(df.iloc[year_idx, 0])
+            price_data['Ref']['green'].append(df.iloc[year_idx, 0])
+            
+            # Carbon price 10
+            price_data['Carbon price pressure-10']['brown'].append(df.iloc[year_idx, 1])
+            price_data['Carbon price pressure-10']['grey'].append(df.iloc[year_idx, 2])
+            price_data['Carbon price pressure-10']['green'].append(0.15)  # Green unchanged
+            
+            # Carbon price 25
+            price_data['Carbon price pressure-25']['brown'].append(df.iloc[year_idx, 3])
+            price_data['Carbon price pressure-25']['grey'].append(df.iloc[year_idx, 4])
+            price_data['Carbon price pressure-25']['green'].append(0.15)
+            
+            # Carbon price 50
+            price_data['Carbon price pressure-50']['brown'].append(df.iloc[year_idx, 5])
+            price_data['Carbon price pressure-50']['grey'].append(df.iloc[year_idx, 6])
+            price_data['Carbon price pressure-50']['green'].append(0.15)
+            
+            # Carbon price 100
+            price_data['Carbon price pressure-100']['brown'].append(df.iloc[year_idx, 7])
+            price_data['Carbon price pressure-100']['grey'].append(df.iloc[year_idx, 8])
+            price_data['Carbon price pressure-100']['green'].append(0.15)
+            
+            # Carbon price 2020
+            price_data['Carbon price pressure-2020']['brown'].append(df.iloc[year_idx, 9])
+            price_data['Carbon price pressure-2020']['grey'].append(df.iloc[year_idx, 10])
+            price_data['Carbon price pressure-2020']['green'].append(0.15)
+        
+        return price_data
     
     def load_consumption_data(self) -> None:
         """Load consumption reference data."""

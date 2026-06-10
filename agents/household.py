@@ -47,6 +47,8 @@ class Household:
         # === ENERGY CONSUMPTION ===
         self.h_q = consumption_q
         self.flag = energy_flag  # 0=grey, 1=brown, 2=green
+
+
         
         # === BEHAVIORAL ATTRIBUTES ===
         self.know = kwargs.get('know', 0.0)
@@ -55,6 +57,7 @@ class Household:
         self.h_aware = 0.0
         self.guilt = GUILT_LOW
         self.K = 0.0
+        self.ep = kwargs.get('ep', 1.0)  # Energy patterns (1-3 scale)
         
         # === NORMS & ATTITUDES - Now using dictionaries ===
         self.per_nab = {
@@ -261,22 +264,28 @@ class Household:
                     self.su_nor[action] >= thresholds[action][1]):
                     self.responsibility = True
     
-    def consider_constraints(self, action: str) -> None:
-        """
-        Determine consideration level and delta factor based on PBC.
-        
-        Args:
-            action: 'investment', 'conservation', or 'switching'
-        """
+    def consider_constraints(self, action: str, energy_patterns: float = None) -> None:
+        """Determine consideration level and delta factor based on PBC."""
         pbc_value = self.pbc[action]
         
-        # Determine consideration level
-        if pbc_value < 4:
-            self.consideration[action] = GUILT_LOW
+        # Special handling for conservation with energy patterns
+        if action == 'conservation' and energy_patterns is not None:
+            if energy_patterns > 2 or pbc_value < 4:
+                self.consideration[action] = GUILT_LOW
+            else:
+                self.consideration[action] = GUILT_HIGH
         else:
-            self.consideration[action] = GUILT_HIGH
+            if pbc_value < 4:
+                self.consideration[action] = GUILT_LOW
+            else:
+                self.consideration[action] = GUILT_HIGH
         
-        # Determine delta factor based on PBC value
+        # Investment: renters cannot invest (delta = 0)
+        if action == 'investment' and hasattr(self, 'dw_st') and self.dw_st == 0:
+            self.delta[action] = 0.0
+            return
+        
+        # Delta based on PBC (same for all actions)
         if pbc_value < 2:
             self.delta[action] = 0.2
         elif pbc_value < 3:
@@ -289,7 +298,7 @@ class Household:
             self.delta[action] = 0.6
         else:
             self.delta[action] = 0.7
-    
+
     def calculate_budgets(self, prices: Dict[str, float]) -> None:
         """Calculate discretionary income (z) for different scenarios."""
         if self.h_q <= 0:
