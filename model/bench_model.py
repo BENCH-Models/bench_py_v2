@@ -172,26 +172,40 @@ class BENCHModel:
         if label_slug:
             parts.append(label_slug)
         return "_".join(parts)
-
+    
     def _create_agents(self) -> bool:
             """
-            Create unique household agents using baseline data from 2015.
+            Create unique household agents using baseline data from 2015 and
+            attach their multi-year income time series.
             
             Returns:
                 True if successful, False otherwise
             """
             try:
-                # 1. Fetch raw household dataset from the data loader
-                household_data = self.data_loader.get_all_households_data()
+                # 1. Fetch raw household dataset containing all years from the data loader
+                raw_household_data = self.data_loader.get_all_households_data()
 
-                # 2. Filter down to the baseline year 2015 to ignore future years' evolution data
-                if 'year' in household_data.columns:
-                    household_data = household_data[household_data['year'] == 2015]
+                income_time_series_map = {}
+                if 'id' in raw_household_data.columns and 'year' in raw_household_data.columns and 'income' in raw_household_data.columns:
+                    # Group by 'id' to isolate each unique agent's trajectory rows
+                    for agent_id, group in raw_household_data.groupby('id'):
+                        # Create a dictionary mapping { year: income } for this specific individual agent
+                        income_time_series_map[int(agent_id)] = dict(
+                            zip(group['year'].astype(int), group['income'].astype(float))
+                        )
                 else:
+                    if VERBOSE:
+                        print("Warning: Missing 'id', 'year', or 'income' columns. Cannot build individual time series.")
+
+                # 2. Filter down to the baseline year 2015 to isolate initialization data
+                if 'year' in raw_household_data.columns:
+                    household_data = raw_household_data[raw_household_data['year'] == 2015]
+                else:
+                    household_data = raw_household_data
                     if VERBOSE:
                         print("Warning: 'year' column not found in household data. Proceeding with raw data rows.")
 
-                # 3. Ensure absolute uniqueness by dropping duplicate entries for the same agent ID
+                # 3. Ensure absolute uniqueness by dropping duplicate entries for the same agent ID in 2015
                 if 'id' in household_data.columns:
                     initial_count = len(household_data)
                     household_data = household_data.drop_duplicates(subset=['id'], keep='first')
@@ -232,6 +246,9 @@ class BENCHModel:
                         **row_dict
                     )
                     
+                    # This attaches a .income_trajectory dictionary attribute to the agent: e.g., {2015: 40810.0, 2016: 42000.0, ...}
+                    household.income_trajectory = income_time_series_map.get(h_id, {2015: income})
+                    
                     # Set initial behavioral attributes if available
                     if 'knowledge' in row or 'know' in row:
                         household.know = float(row.get('knowledge'))
@@ -265,7 +282,7 @@ class BENCHModel:
                 self.n_households = len(self.households)
                 self._place_households_on_grid()
                 if VERBOSE:
-                    print(f"✓ Created {self.n_households} unique household agents from Year 2015 baseline.")
+                    print(f"✓ Created {self.n_households} unique household agents from Year 2015 baseline with complete historical income trajectories.")
                 return True
                 
             except Exception as e:

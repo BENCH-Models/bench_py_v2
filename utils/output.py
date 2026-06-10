@@ -204,7 +204,7 @@ class ResultsExporter:
                 final = stats_aggregator.annual_stats[end_year]
                 f.write("FINAL YEAR METRICS (Year {})\n".format(end_year))
                 f.write("-" * 60 + "\n")
-                f.write(f"Renewable Energy Share: {final.get('lce_share_percent'):.1f}%\n")
+                f.write(f"Renewable Energy Share: {final.get('green_share_percent'):.1f}%\n")
                 f.write(f"High Awareness Households: {final.get('high_guilt_percent'):.1f}%\n")
                 f.write(f"Average Awareness: {final.get('avg_awareness'):.2f}\n\n")
             
@@ -294,7 +294,7 @@ class ResultsExporter:
         
         # Key trajectories
         trajectories = [
-            'lce_share_percent',
+            'green_share_percent',
             'action_1_count',
             'action_2_count',
             'action_3_count',

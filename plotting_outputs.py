@@ -55,8 +55,14 @@ def _extract_variable_series(df: pd.DataFrame, y_col: str) -> np.ndarray:
     elif y_col == 'emissions_avoided_tons_per_capita':
         if 'emissions_avoided_per_capita' in df.columns:
             return df['emissions_avoided_per_capita'].values / 1000.0
-    elif y_col in df.columns:
+        if 'total_emissions_avoided_kg_co2' in df.columns:
+            # Added fallback scaling logic if per_capita wasn't explicitly calculated
+            return df['total_emissions_avoided_kg_co2'].values / 1000.0
+            
+    # CRITICAL FIX: Fallback string matching to ensure standard columns extract correctly
+    if y_col in df.columns:
         return df[y_col].values
+        
     return None
 
 
@@ -71,7 +77,6 @@ def find_run_data_for_config(output_root: str, configs: List[Dict[str, Any]]) ->
         print(f"Error: Target batch output folder does not exist: {output_root}")
         return batch_data
 
-    # Read all subdirectories currently available inside the batch session folder
     all_subfolders = [f for f in glob.glob(os.path.join(output_root, "*")) if os.path.isdir(f)]
     
     for config in configs:
@@ -80,15 +85,12 @@ def find_run_data_for_config(output_root: str, configs: List[Dict[str, Any]]) ->
             continue
             
         seed_dfs = []
-        
-        # Filter directories that match our structural scenario flag label (e.g. '_FDC' or '_Baseline')
         config_matched_folders = []
         for folder in all_subfolders:
             folder_name = os.path.basename(folder)
             if folder_name.endswith(f"_{base_label}") or f"_{base_label}_" in folder_name or folder_name == base_label:
                 config_matched_folders.append(folder)
         
-        # Sort folders chronologically by name so seed ordering remains intact
         config_matched_folders.sort()
         
         for matched_folder in config_matched_folders:
@@ -125,7 +127,6 @@ def plot_batch_comparison(batch_data: List[Tuple[str, List[pd.DataFrame]]],
             if x_col in df.columns and y_series is not None:
                 df_sorted = df.sort_values(by=x_col)
                 x_values = df_sorted[x_col].values
-                # Re-extract sorted arrays securely
                 y_series_sorted = _extract_variable_series(df_sorted, y_col)
                 combined_matrix.append(y_series_sorted)
                 
@@ -135,14 +136,12 @@ def plot_batch_comparison(batch_data: List[Tuple[str, List[pd.DataFrame]]],
         data_matrix = np.array(combined_matrix)
         n_samples = data_matrix.shape[0]
         
-        # Compute mean trajectory
         mean_line = np.mean(data_matrix, axis=0)
-        
         line, = plt.plot(x_values, mean_line, label=f"{label} (N={n_samples})", marker='o', linewidth=2, markersize=4)
         color = line.get_color()
         plotted = True
         
-        # Apply standard normal distribution error properties for large sample data pools (N >= 100)
+        # Calculate and apply confidence intervals
         if n_samples > 1:
             std_dev = np.std(data_matrix, axis=0, ddof=1)
             standard_error = std_dev / np.sqrt(n_samples)
@@ -151,7 +150,8 @@ def plot_batch_comparison(batch_data: List[Tuple[str, List[pd.DataFrame]]],
             lower_bound = mean_line - margin_error
             upper_bound = mean_line + margin_error
             
-            plt.fill_between(x_values, lower_bound, upper_bound, color=color, alpha=0.08)
+            # OPTIMIZATION: Increased alpha opacity from 0.08 to 0.15 so bands stand out clearly
+            plt.fill_between(x_values, lower_bound, upper_bound, color=color, alpha=0.15)
 
     if not plotted:
         plt.close()
@@ -191,7 +191,7 @@ def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     saved_plots = []
     
     variables_to_plot = [
-        'lce_share_percent',
+        'green_share_percent',
         'action_1_count',
         'action_2_count',
         'action_3_count',
@@ -202,12 +202,11 @@ def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     ]
     
     for var in variables_to_plot:
-        # Check if the target variable or its supporting fallback column is present
         if var == 'co2_emitted_tons_per_capita':
             supported = any(('emissions_per_capita_kg_co2' in df.columns or 'emissions_per_capita_tons' in df.columns) for _, dfs in batch_data for df in dfs)
             title = 'CO2 Emissions per Capita (tons) (95% CI)'
         elif var == 'emissions_avoided_tons_per_capita':
-            supported = any('emissions_avoided_per_capita' in df.columns for _, dfs in batch_data for df in dfs)
+            supported = any(('emissions_avoided_per_capita' in df.columns or 'total_emissions_avoided_kg_co2' in df.columns) for _, dfs in batch_data for df in dfs)
             title = 'CO2 Emissions Avoided per Capita (tons) (95% CI)'
         else:
             supported = any(var in df.columns for _, dfs in batch_data for df in dfs)
@@ -262,7 +261,7 @@ def main():
             plots_dir = create_plots_dir(run_folder)
             
             variables = [
-                ('lce_share_percent', "LCE Consumption Share (%)"),
+                ('green_share_percent', "Green Consumption Share (%)"),
                 ('action_1_count', "Action 1 Counts"),
                 ('action_2_count', "Action 2 Counts"),
                 ('action_3_count', "Action 3 Counts"),

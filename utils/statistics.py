@@ -36,12 +36,12 @@ class StatisticsAggregator:
         n_households = len(households)
         
         # === CONSUMPTION ===
-        total_ff = sum(hh.h_q for hh in households if hh.flag == 0)
-        total_lce = sum(hh.h_q for hh in households if hh.flag == 1)
-        total_slce = sum(hh.h_q for hh in households if hh.flag == 2)
-        total_consumption = total_ff + total_lce + total_slce
+        total_grey = sum(hh.h_q for hh in households if hh.flag == 0)
+        total_brown = sum(hh.h_q for hh in households if hh.flag == 1)
+        total_green = sum(hh.h_q for hh in households if hh.flag == 2)
+        total_consumption = total_grey + total_brown + total_green      
         
-        lce_share = (total_lce + total_slce) / total_consumption * 100 if total_consumption > 0 else 0
+        green_share = (total_green) / total_consumption * 100 if total_consumption > 0 else 0
         
         # === ACTIONS ===
         action_1_count = sum(1 for hh in households if hh.act1)
@@ -76,11 +76,11 @@ class StatisticsAggregator:
             'n_households': n_households,
             
             # Consumption
-            'consumption_ff': total_ff,
-            'consumption_lce': total_lce,
-            'consumption_slce': total_slce,
+            'consumption_grey': total_grey,
+            'consumption_brown': total_brown,
+            'consumption_green': total_green,
             'consumption_total': total_consumption,
-            'lce_share_percent': lce_share,
+            'green_share_percent': green_share,
             
             # Actions
             'action_1_count': action_1_count,
@@ -226,7 +226,7 @@ class StatisticsAggregator:
         Get time series of a specific variable.
         
         Args:
-            variable: Variable name (e.g., 'lce_share_percent')
+            variable: Variable name
             start_year: Start year
             end_year: End year
             
