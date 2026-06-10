@@ -58,6 +58,7 @@ class Household:
         self.guilt = GUILT_LOW
         self.K = 0.0
         self.ep = kwargs.get('ep', 1.0)  # Energy patterns (1-3 scale)
+        self.alpha = kwargs.get('alpha', 0.043)  # Default alpha value
         
         # === NORMS & ATTITUDES - Now using dictionaries ===
         self.per_nab = {

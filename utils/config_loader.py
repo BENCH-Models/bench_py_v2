@@ -72,6 +72,8 @@ def normalize_run_config(config: Dict[str, Any]) -> Dict[str, Any]:
     # ADD THIS - Carbon price awareness flag (default to True)
     normalized['carbon_price_awareness'] = normalized.get('carbon_price_awareness', True)
 
+    # ADD THIS - Satisfaction and regret flag (default to True)
+    normalized['satisfaction_regret'] = normalized.get('satisfaction_regret', True)
 
     # Keep values even if not in known lists so experiments can use custom labels.
     if normalized['case_study'] not in CASE_STUDIES:

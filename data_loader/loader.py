@@ -195,8 +195,102 @@ class DataLoader:
                 
         except Exception as e:
             print(f"Warning: Could not load all CGE data: {e}")
-    
-    
+
+    def load_cge_trajectories(self) -> Dict:
+        """
+        Load CGE economic trajectories for income, consumption, and alpha.
+        Returns dictionary with yearly multipliers by income group.
+        
+        The CGE files contain growth multipliers. For example:
+        - A value of 1.02 means 2% growth
+        - A value of 0.98 means 2% decrease
+        
+        File structure (from NetLogo):
+        - Each row represents a year (2015, 2016, 2017, ...)
+        - Columns represent different income group trajectories
+        """
+        cge_data = {
+            'income': {},
+            'consumption': {},
+            'alpha': {}
+        }
+        
+        # Load income growth data
+        income_path = os.path.join(self.base_path, CGE_NL_H_FILE)
+        if os.path.exists(income_path):
+            try:
+                # Try reading with header first
+                df = pd.read_csv(income_path)
+                # Check if it's a single column (growth factors by year)
+                if len(df.columns) == 1:
+                    cge_data['income']['raw'] = df.iloc[:, 0].tolist()
+                else:
+                    cge_data['income']['raw'] = df.values.tolist()
+                #print(f"✓ Loaded CGE income data: {len(cge_data['income']['raw'])} years")
+            except Exception as e:
+                # Fallback: read without header
+                df = pd.read_csv(income_path, header=None)
+                cge_data['income']['raw'] = df.values.tolist()
+                #print(f"✓ Loaded CGE income data (no header): {len(cge_data['income']['raw'])} years")
+        else:
+            print(f"Warning: CGE income file not found: {income_path}")
+            # Provide default growth factors (1.0 = no growth) as fallback
+            cge_data['income']['raw'] = [[1.0] for _ in range(16)]  # 2015-2030
+        
+        # Load consumption growth data
+        cons_path = os.path.join(self.base_path, CGE_NL_CON_FILE)
+        if os.path.exists(cons_path):
+            try:
+                df = pd.read_csv(cons_path)
+                if len(df.columns) == 1:
+                    cge_data['consumption']['raw'] = df.iloc[:, 0].tolist()
+                else:
+                    cge_data['consumption']['raw'] = df.values.tolist()
+                #print(f"✓ Loaded CGE consumption data: {len(cge_data['consumption']['raw'])} years")
+            except Exception:
+                df = pd.read_csv(cons_path, header=None)
+                cge_data['consumption']['raw'] = df.values.tolist()
+                #print(f"✓ Loaded CGE consumption data (no header): {len(cge_data['consumption']['raw'])} years")
+        else:
+            print(f"Warning: CGE consumption file not found: {cons_path}")
+            cge_data['consumption']['raw'] = [[1.0] for _ in range(16)]
+        
+        # Load alpha data
+        alpha_path = os.path.join(self.base_path, CGE_NL_ALPHA_FILE)
+        if os.path.exists(alpha_path):
+            try:
+                df = pd.read_csv(alpha_path)
+                if len(df.columns) == 1:
+                    cge_data['alpha']['raw'] = df.iloc[:, 0].tolist()
+                else:
+                    cge_data['alpha']['raw'] = df.values.tolist()
+                #print(f"✓ Loaded CGE alpha data: {len(cge_data['alpha']['raw'])} years")
+            except Exception:
+                df = pd.read_csv(alpha_path, header=None)
+                cge_data['alpha']['raw'] = df.values.tolist()
+                #print(f"✓ Loaded CGE alpha data (no header): {len(cge_data['alpha']['raw'])} years")
+        else:
+            print(f"Warning: CGE alpha file not found: {alpha_path}")
+            # Default alpha values by income group (from NetLogo survey data)
+            default_alphas = {
+                1: 0.0199,
+                2: 0.0191,
+                3: 0.0175,
+                4: 0.0159,
+                5: 0.0133,
+                6: 0.0133,
+                7: 0.0133,
+            }
+            # Create list of alpha values for each year (constant over time)
+            alpha_list = []
+            for year in range(16):  # 2015-2030
+                year_data = [default_alphas.get(g, 0.015) for g in range(1, 8)]
+                alpha_list.append(year_data)
+            cge_data['alpha']['raw'] = alpha_list
+            print("✓ Using default alpha values from NetLogo survey data")
+        
+        return cge_data
+
     def get_all_households_data(self) -> pd.DataFrame:
         """Return all household data as DataFrame."""
         return self.households_df.copy() if self.households_df is not None else pd.DataFrame()

@@ -42,28 +42,19 @@ class BENCHModel:
     """
     
     def __init__(self, 
-                 case_study: str, 
-                 scenario: str, 
-                 policy: str,
-                 learning_type: str = DEFAULT_LEARNING_TYPE,
-                 run_label: str = None,
-                 base_path: str = ".",
-                 output_root: str = None,
+                case_study: str, 
+                scenario: str, 
+                policy: str,
+                learning_type: str = DEFAULT_LEARNING_TYPE,
+                run_label: str = None,
+                base_path: str = ".",
+                output_root: str = None,
                 seed: Optional[int] = None,
-                carbon_price_awareness: bool = True
-                 ):
-        """
-        Initialize BENCH model.
+                carbon_price_awareness: bool = True,
+                satisfaction_regret: bool = True
+                ):
+        # ... basic attribute assignments ...
         
-        Args:
-            case_study: "Netherlands-Overijssel" or "Spain-Navarre"
-            scenario: "Ref_SSP2"
-            policy: Price scenario policy
-            learning_type: One of the supported learning modes
-            run_label: Optional label used to make run IDs readable
-            base_path: Path to project root
-            output_root: Optional root directory for output folders
-        """
         self.case_study = case_study
         self.scenario = scenario
         self.policy = policy
@@ -73,15 +64,25 @@ class BENCHModel:
         self.output_root = output_root or os.path.join(self.base_path, OUTPUT_DIR)
         self.run_id = self._generate_run_id()
         self.run_output_dir = os.path.join(self.output_root, self.run_id)
-        self.carbon_price_awareness = carbon_price_awareness 
+        self.carbon_price_awareness = carbon_price_awareness
+        self.satisfaction_regret = satisfaction_regret 
         
         # Simulation state
         self.year = MODEL_START_YEAR
         self.households = []
         self.n_households = 0
         
-        # Market state initially
-            # Load price trajectories
+        # Components - CREATE THESE FIRST!
+        self.data_loader = DataLoader(base_path)
+        self.utility_calculator = UtilityCalculator()
+        self.decision_maker = DecisionMaker()
+        self.learning_mechanism = LearningMechanism()
+        self.statistics = StatisticsAggregator()
+        
+        # THEN load trajectories (depends on data_loader)
+        self.cge_data = self.data_loader.load_cge_trajectories()
+        
+        # Market state - load price trajectories
         self.price_trajectories = {}
         self._load_price_trajectories()
         self.prices = {
@@ -94,24 +95,14 @@ class BENCHModel:
         self.seed = seed
         if self.seed is not None:
             random.seed(self.seed)
-            # If you use numpy somewhere, uncomment the line below:
-            # import numpy as np; np.random.seed(self.seed)
-                            
-        # Update output directory to include seed tracking if a label exists
+        
+        # Update output directory
         if run_label and seed is not None:
             self.run_label = f"{run_label}_seed_{seed}"
         elif run_label:
             self.run_label = run_label
         
-        # Components
-        self.data_loader = DataLoader(base_path)
-        self.utility_calculator = UtilityCalculator()
-        self.decision_maker = DecisionMaker()
-        self.learning_mechanism = LearningMechanism()
-        self.statistics = StatisticsAggregator()
-
-
-        # Build distinct output subfolder for this seed
+        # Build output subfolder
         actual_output_dir = output_root if output_root else os.path.join(self.base_path, OUTPUT_DIR)
         if self.run_label:
             actual_output_dir = os.path.join(actual_output_dir, self.run_label)
@@ -138,7 +129,8 @@ class BENCHModel:
         self.memory_recall = True
         if VERBOSE:
             self._print_agent_summary()
-    
+
+
     def initialize(self) -> bool:
         """
         Initialize model: load data and create agents.
@@ -343,6 +335,22 @@ class BENCHModel:
             if pos in self.grid_index
         ]
 
+    def _apply_satisfaction_and_regret(self) -> None:
+        """Apply satisfaction and regret for households that took actions in previous years."""
+        if self.year < 2017:
+            return
+        
+        for household in self.households:
+            satisfaction = self.decision_maker.calculate_satisfaction(household)
+            if satisfaction != "none":
+                # Store satisfaction for learning/regret
+                if not hasattr(household, 'satisfaction_history'):
+                    household.satisfaction_history = {}
+                household.satisfaction_history[self.year] = satisfaction
+                
+                # Apply regret effects
+                self.decision_maker.apply_regret(household, satisfaction, self.learning_type)
+
     def _print_agent_summary(self) -> None:
         """Print summary of created agents."""
         if self.n_households == 0:
@@ -367,71 +375,202 @@ class BENCHModel:
         print(f"  Average Awareness: {avg_awareness:.2f}")
     
     def step(self) -> bool:
-        """Execute one year of simulation."""
+        """Execute one year of simulation matching NetLogo's go procedure order."""
+
         if self.year > MODEL_END_YEAR:
             return False
         
+        # === MEMORY RECALL (only 2015) ===
         if self.year == MODEL_START_YEAR and self.memory_recall:
             self._recall_memory()
         
+        # === UPDATE PRICES ===
         self._update_prices()
         
-        # ADD THIS - Apply carbon price awareness (cpinfo)
+        # === CARBON PRICE AWARENESS (cpinfo) ===
         if self.carbon_price_awareness and self.year >= 2016:
             for household in self.households:
                 self.decision_maker.apply_carbon_price_awareness(household, self.policy, self.year)
-
-        # --- PASS 1: Update individual attributes and raw budgets ---
+        
+        # === KNOWLEDGE ACTIVATION ===
         for household in self.households:
-            household.set_income_for_year(self.year)
             self.decision_maker.activate_knowledge(household, self.case_study)
+        
+        # === MOTIVATION ===
+        for household in self.households:
             self.decision_maker.update_motivation(household, self.case_study)
-            
-            # Pass energy patterns for conservation consideration
+        
+        # === CONSIDERATION (with energy patterns for conservation) ===
+        for household in self.households:
             for action_name in ['investment', 'conservation', 'switching']:
                 ep = getattr(household, 'ep', None) if action_name == 'conservation' else None
                 household.consider_constraints(action_name, ep)
-            
+        
+        # === UPDATE HOUSEHOLD ATTRIBUTES AND BUDGETS ===
+        for household in self.households:
+            household.set_income_for_year(self.year)
             household.calculate_budgets(self.prices)
-            
-        # --- PASS 2: Global Population Normalization ---
+        
+        # === GLOBAL POPULATION NORMALIZATION (normalize-1) ===
         self.utility_calculator.normalize_budgets(self.households)
         
-        # --- PASS 3: Utility Evaluation & Decision Execution ---
+        # === NORMALIZE BUDGET VALUES PER HOUSEHOLD ===
         for household in self.households:
-            # Normalize this agent's values
             self.utility_calculator.normalize_budget_values(household)
-            
-            # Calculate expected utilities (now uses dictionary method)
+        
+        # === ACTUAL UTILITIES (update_utilities_NAT) - PASS ALL HOUSEHOLDS AND PRICES ===
+        self.utility_calculator.calculate_actual_utility(self.households, self.prices)
+        
+        # === SATISFACTION AND REGRET (only from 2017 onwards) ===
+        if self.satisfaction_regret and self.year >= 2017:
+            self._apply_satisfaction_and_regret()
+        
+        # === EXPECTED UTILITIES (utility_exp_NAT) ===
+        for household in self.households:
             self.utility_calculator.calculate_all_expected_utilities(household)
-            
-            # Execute choices (will need updated decision_maker)
-            self.decision_maker.decide_action(household, {}, self.utility_calculator)
-            
-            # Post-decision accounting
+        
+        # === ACTIONS (only from 2016 onwards) ===
+        if self.year >= 2016:
+            for household in self.households:
+                self.decision_maker.decide_action(household, {}, self.utility_calculator)
+        
+        # === SAVE ENERGY AND EMISSIONS ===
+        for household in self.households:
             self.decision_maker.calculate_energy_savings(household, self.prices)
             self.decision_maker.calculate_financial_outcomes(household, self.prices)
             self.decision_maker.calculate_emissions_avoided(household, self.prices)
-            
-            # Record experienced utility
-            self.utility_calculator.calculate_actual_utility(household)
-            self.learning_mechanism.update_memory(household, self.year)
         
-        # AFTER all utility calculations and decisions, update consumption
+        # === UPDATE ECONOMIC DATA (income, consumption, alpha from CGE) ===
+        self._update_economic_data()
+        
+        # === SOCIAL LEARNING ===
+        self._apply_social_learning()
+        
+        # === UPDATE ENERGY CONSUMPTION (update_heq) ===
         self._update_energy_consumption()
         
+        # === UPDATE MEMORY (reset annual flags and apply cooldowns) ===
+        self._update_memory()
+        
+        # === RECORD STATISTICS ===
         stats = self.statistics.aggregate_population_stats(self.households, self.year)
         self.statistics.store_annual_stats(self.year, stats)
-        #record before the social learning step to capture the direct effect of individual decision-making without social influence confounding it
-
-        # --- PASS 4: Social Learning & Aggregation ---
-        self._apply_social_learning()
-
-        # Reset annual action flags for next year
-        self._reset_annual_actions()
         
         self.year += 1
         return True
+    
+    def _update_economic_data(self) -> None:
+        """
+        Update household economic data from CGE trajectories.
+        Matches NetLogo's update_data procedure.
+        
+        This updates:
+        - Income (h_income) using growth multipliers from CGE data
+        - Electricity consumption (h_q) using growth multipliers from CGE data
+        - Alpha parameter (share of electricity consumption)
+        """
+        # First update happens in 2016 (NetLogo uses n=1 for 2016)
+        if self.year < 2016:
+            return
+        
+        # Check if CGE data is available
+        if not self.cge_data:
+            if VERBOSE and self.year == 2016:
+                print("Warning: No CGE data loaded - skipping economic updates")
+            return
+        
+        # Calculate year index for CGE data
+        # NetLogo uses 'n' which starts at 0 for 2015, so:
+        # 2015: n=0, 2016: n=1, 2017: n=2, etc.
+        year_index = self.year - 2015
+        
+        # Get the raw data lists
+        income_data = self.cge_data.get('income', {}).get('raw', [])
+        consumption_data = self.cge_data.get('consumption', {}).get('raw', [])
+        alpha_data = self.cge_data.get('alpha', {}).get('raw', [])
+        
+        # Check if we have data for this year
+        if year_index >= len(income_data):
+            if VERBOSE and self.year == 2016:
+                print(f"Warning: No CGE data for year index {year_index}")
+            return
+        
+        for household in self.households:
+            income_group = household.h_income_group
+            
+            # Map income group to column index (matching NetLogo)
+            # NetLogo uses different 't' offsets per income group:
+            # Income group 1: uses n (0,1,2,3,4,5...)
+            # Income group 2: uses n+1 (1,2,3,4,5,6...)
+            # Income group 3: uses n+2 (2,3,4,5,6,7...)
+            # Income group 4: uses n+3 (3,4,5,6,7,8...)
+            # Income groups 5+: uses n+4 (4,5,6,7,8,9...)
+            
+            if income_group == 1:
+                col_idx = 0
+                cons_idx = 0
+                alpha_idx = 0
+            elif income_group == 2:
+                col_idx = 0
+                cons_idx = 1  # NetLogo uses t = n+1
+                alpha_idx = 1
+            elif income_group == 3:
+                col_idx = 0
+                cons_idx = 2  # NetLogo uses t = n+2
+                alpha_idx = 2
+            elif income_group == 4:
+                col_idx = 0
+                cons_idx = 3  # NetLogo uses t = n+3
+                alpha_idx = 3
+            else:  # Income groups 5, 6, 7
+                col_idx = 0
+                cons_idx = 4  # NetLogo uses t = n+4
+                alpha_idx = 4
+            
+            # Update income using growth multiplier
+            if income_data and year_index < len(income_data):
+                try:
+                    # Get the multiplier for this year and column
+                    if isinstance(income_data[year_index], (list, tuple)):
+                        income_multiplier = income_data[year_index][col_idx]
+                    else:
+                        income_multiplier = income_data[year_index]
+                    
+                    # Apply multiplier (NetLogo multiplies current income by growth factor)
+                    household.h_income = household.h_income * income_multiplier
+                except (IndexError, TypeError) as e:
+                    if VERBOSE and self.year == 2016:
+                        print(f"Warning: Could not update income for group {income_group}: {e}")
+            
+            # Update consumption (h_q) using growth multiplier
+            if consumption_data and year_index < len(consumption_data):
+                try:
+                    # Get the multiplier for this year and consumption index
+                    if isinstance(consumption_data[year_index], (list, tuple)):
+                        consumption_multiplier = consumption_data[year_index][cons_idx]
+                    else:
+                        consumption_multiplier = consumption_data[year_index]
+                    
+                    # Apply multiplier
+                    household.h_q = household.h_q * consumption_multiplier
+                except (IndexError, TypeError) as e:
+                    if VERBOSE and self.year == 2016:
+                        print(f"Warning: Could not update consumption for group {income_group}: {e}")
+            
+            # Update alpha (share parameter)
+            if alpha_data and year_index < len(alpha_data):
+                try:
+                    # Get alpha value for this year and alpha index
+                    if isinstance(alpha_data[year_index], (list, tuple)):
+                        new_alpha = alpha_data[year_index][alpha_idx]
+                    else:
+                        new_alpha = alpha_data[year_index]
+                    
+                    # Set alpha directly (not multiplied)
+                    household.alpha = new_alpha
+                except (IndexError, TypeError) as e:
+                    if VERBOSE and self.year == 2016:
+                        print(f"Warning: Could not update alpha for group {income_group}: {e}")
 
     def _recall_memory(self) -> None:
         """Apply 2015 memory recall for historical behavior."""
@@ -441,7 +580,91 @@ class BENCHModel:
                 household.flag, self.case_study
             )
 
-    
+    def _update_memory(self) -> None:
+        """
+        Update household memory and apply action cooldowns.
+        Matches NetLogo's update_memory procedure.
+        
+        This method:
+        1. Increments cooldown counters for actions taken in previous years
+        2. Re-enables actions after cooldown periods expire
+        3. Resets annual action flags for the next year
+        
+        Cooldown periods:
+        - Investment (act11/act12): 10 years before can invest again
+        - Conservation (act21/act40): 5 years before can conserve again
+        - Switching (act32): 2 years before can switch again
+        """
+        # Initialize cooldown counters if they don't exist (first run)
+        for household in self.households:
+            if not hasattr(household, 'act11_year'):
+                household.act11_year = 0
+                household.act12_year = 0
+                household.act21_year = 0
+                household.act40_year = 0
+                household.act31_year = 0
+                household.act32_year = 0
+        
+        # First: Increment counters for actions that are currently active
+        for household in self.households:
+            # Investment counters (act11 for brown/green, act12 for grey)
+            if household.act11:
+                household.act11_year += 1
+            if household.act12:
+                household.act12_year += 1
+            
+            # Conservation counters (act21 for brown/green, act40 for grey)
+            if household.act21:
+                household.act21_year += 1
+            if household.act40:
+                household.act40_year += 1
+            
+            # Switching counters (act31 for brown->green, act32 for grey->brown)
+            if household.act31:
+                household.act31_year += 1
+            if household.act32:
+                household.act32_year += 1
+        
+        # Second: Apply cooldown expirations (re-enable actions after cooldown)
+        for household in self.households:
+            # === INVESTMENT COOLDOWN (10 years) ===
+            # After 10 years, investment can be taken again
+            if household.act11_year >= 10:
+                household.hh_actions[0] = 0  # Reset action vector
+                household.act11 = False      # Clear the action flag
+                household.act11_year = 0     # Reset counter
+            
+            if household.act12_year >= 10:
+                household.hh_actions[1] = 0
+                household.act12 = False
+                household.act12_year = 0
+            
+            # === CONSERVATION COOLDOWN (5 years) ===
+            # After 5 years, conservation can be taken again
+            if household.act21_year >= 5:
+                household.hh_actions[2] = 0
+                household.act21 = False
+                household.act21_year = 0
+            
+            if household.act40_year >= 5:
+                household.hh_actions[3] = 0
+                household.act40 = False
+                household.act40_year = 0
+            
+            # === SWITCHING COOLDOWN (2 years for act32 grey->brown) ===
+            # After 2 years, switching can be taken again
+            if household.act32_year >= 2:
+                household.hh_actions[5] = 0
+                household.act32 = False
+                household.act32_year = 0
+            
+            # Note: act31 (brown->green) does NOT have a cooldown in NetLogo
+            # Once switched to green, they stay green (no switching back)
+        
+        # Third: Reset annual action flags for the next year
+        # These are the flags that count for yearly statistics (act1, act2, act3)
+        self._reset_annual_actions()
+
     def _load_price_trajectories(self) -> None:
         """Load price trajectories from data files."""
         file_path = os.path.join(self.base_path, PRIMES_NL_PRICES_FILE)
@@ -497,19 +720,25 @@ class BENCHModel:
             self.prices = self.price_trajectories[self.year].copy()
 
     def _apply_social_learning(self) -> None:
-        """Apply the selected learning algorithm to households after 2015."""
+        """
+        Apply the selected learning algorithm to households after 2015.
+        Matches NetLogo's learn procedure placement.
+        """
         if self.year < 2016 or self.learning_type == "No learning":
             return
 
         for household in self.households:
-            # 1. Check the central household FIRST. 
-            # If it hasn't done ANY of these actions, skip immediately.
-            if not (household.act1 or household.act3 or household.act50):
-                continue  # Skip to the next household
+            # NetLogo checks if household has taken ANY action (act1, act50, or act3)
+            if not (household.act1 or household.act50 or household.act3):
+                continue  # Skip inactive households
 
-            # 2. Only fetch neighbors and do heavy math if the central household is active
+            # Get neighbors (8-cell grid neighborhood)
             neighbors = self._get_grid_neighbors(household)
             
+            if not neighbors:
+                continue
+            
+            # Apply learning
             self.learning_mechanism.apply_learning(
                 household,
                 neighbors,
@@ -518,26 +747,58 @@ class BENCHModel:
             )
 
     def _update_energy_consumption(self) -> None:
-        """Update household energy consumption based on actions taken (NetLogo's update_heq)."""
+        """
+        Update household energy consumption based on actions taken.
+        Matches NetLogo's update_heq procedure.
+        
+        Order of operations (matches NetLogo):
+        1. Investment reduces consumption by fixed amount (1700 kWh)
+        2. Conservation reduces consumption by saved amount (50% of original)
+        3. Minimum consumption floor of 1000 kWh after conservation
+        
+        Note: h_conserv is calculated in calculate_energy_savings BEFORE this method
+            using the original h_q value (before any reductions)
+        """
         for household in self.households:
+            # === INVESTMENT (act1) ===
+            # NetLogo: if (act1 = True and h_q > 0) [set h_q (h_q - 1700)]
             if household.act1 and household.h_q > 0:
-                household.h_q = max(0, household.h_q - INVESTMENT_PV_ENERGY_OUTPUT)
+                household.h_q = household.h_q - INVESTMENT_PV_ENERGY_OUTPUT
+                
+                # Check if household became a self-producer
                 if household.h_q <= 0:
                     household.hh_sta = "self-producer"
+                    household.h_q = 0
             
-            if household.act50 and household.h_q > 1000:
-                household.h_q = max(1000, household.h_q - household.h_conserv)
-            elif household.act50 and household.h_q <= 1000:
-                household.hh_sta = "efficient"
-                household.h_q = 1000
+            # === CONSERVATION (act50) ===
+            # NetLogo: if ((act50 = True) and (h_q > 1000)) [set h_q (h_q - h_conserv)]
+            #          if ((act50 = True) and (h_q <= 1000)) [set hh_sta "efficient" set h_q 1000]
+            if household.act2 or household.act50:
+                if household.h_q > 1000:
+                    # Reduce consumption by saved amount
+                    household.h_q = household.h_q - household.h_conserv
+                    # Ensure minimum of 1000 kWh
+                    if household.h_q < 1000:
+                        household.h_q = 1000
+                else:
+                    # Already at or below minimum
+                    household.hh_sta = "efficient"
+                    household.h_q = 1000
 
     def _reset_annual_actions(self) -> None:
-        """Reset annual action flags (NetLogo's update_memory reset)."""
+        """
+        Reset annual action flags.
+        These are the flags that count for yearly statistics.
+        
+        Note: act11, act12, act21, act40, act31, act32 are PERMANENT records
+        that track if an action was EVER taken and are used for cooldowns.
+        They are NOT reset here.
+        """
         for household in self.households:
-            household.act1 = False
-            household.act2 = False  
-            household.act3 = False
-            # Don't reset act11, act12, etc. - those are permanent records
+            household.act1 = False   # General investment flag for current year
+            household.act2 = False   # General conservation flag for current year
+            household.act3 = False   # General switching flag for current year
+            # Do NOT reset act11, act12, act21, act40, act31, act32
 
     def run(self) -> bool:
         """

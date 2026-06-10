@@ -21,77 +21,179 @@ class LearningMechanism:
         self.learning_history = {}  # Historical learning data
     
     def apply_learning(self, source_household, neighboring_households: List,
-                       year: int, learning_type: str) -> None:
+                    year: int, learning_type: str) -> None:
         """
         Apply the selected learning algorithm to neighbors.
-
+        Matches NetLogo's learn procedure.
+        
         Learning modes:
-        - No learning: no neighbor influence.
-        - Fast adaptation: all households in the active neighborhood learn from each other.
-        - Slow adaptation: each active household interacts with up to two neighbors.
+        - No learning: no neighbor influence (already handled in step())
+        - Fast adaptation: source household influences ALL neighbors
+        - Slow adaptation: source household influences up to 2 random neighbors
+        - Observation: (not in your constants but in NetLogo) - higher influence
+        - Promote switching: (not in your constants) - focused on switching
         """
-
+        if learning_type == "No learning":
+            return
+        
+        # === STEP 1: Reinforce PBC for the source household (active learner) ===
+        # NetLogo does this BEFORE neighbor learning
         if learning_type == "Fast adaptation":
-            neighbors_subsample = list(neighboring_households)
+            # 5% increase for all PBC
+            for action in source_household.pbc:
+                if source_household.pbc[action] < 6.5:
+                    source_household.pbc[action] = min(
+                        source_household.pbc[action] * 1.05,
+                        BEHAVIORAL_SCALE_MAX
+                    )
+        elif learning_type == "Slow adaptation":
+            # 2% increase for all PBC (slower learning)
+            for action in source_household.pbc:
+                if source_household.pbc[action] < 6.5:
+                    source_household.pbc[action] = min(
+                        source_household.pbc[action] * 1.02,
+                        BEHAVIORAL_SCALE_MAX
+                    )
+        # Note: "Observation" and "Promote switching" would have different rates
+        
+        # === STEP 2: Select neighbors to influence ===
+        if not neighboring_households:
+            return
+        
+        if learning_type == "Fast adaptation":
+            neighbors_to_influence = list(neighboring_households)
         elif learning_type == "Slow adaptation":
             sample_count = min(2, len(neighboring_households))
-            neighbors_subsample = random.sample(neighboring_households, sample_count)
+            neighbors_to_influence = random.sample(neighboring_households, sample_count)
         else:
-            raise ValueError(f"Unknown learning type: {learning_type}")
-
-        # Build neighborhood statistics including the active source household.
-        know_values = [hh.know for hh in neighbors_subsample]
-        awareness_values = [hh.h_aware for hh in neighbors_subsample]
+            # Unknown learning type - no learning
+            return
         
-        # FIX: Use dictionary access for su_nor and pbc
-        su_invest_values = [hh.su_nor.get('investment', 0) for hh in neighbors_subsample]
-        pbc_switch_values = [hh.pbc.get('switching', 0) for hh in neighbors_subsample]
-
-        def mean(values):
-            return sum(values) / len(values) if values else 0.0
-
-        def median(values):
-            sorted_values = sorted(values)
-            n = len(sorted_values)
-            if n == 0:
-                return 0.0
-            mid = n // 2
-            return (sorted_values[mid] if n % 2 == 1 else (sorted_values[mid - 1] + sorted_values[mid]) / 2.0)
-
-        target_know = max(mean(know_values), median(know_values))
-        target_awareness = max(mean(awareness_values), median(awareness_values))
-        target_su_invest = max(mean(su_invest_values), median(su_invest_values))
-        target_pbc_switch = max(mean(pbc_switch_values), median(pbc_switch_values))
-
-        for neighbor in neighbors_subsample:  # CENTRAL INDIVIDUAL TEACHES NEIGHBORS
-            if neighbor.know < target_know:
-                neighbor.know = min(neighbor.know * 1.05, BEHAVIORAL_SCALE_MAX)
-
-            if neighbor.h_aware < target_awareness:
-                neighbor.h_aware = min(neighbor.h_aware * 1.05, BEHAVIORAL_SCALE_MAX)
-                neighbor.update_awareness()
-
-            # FIX: Use dictionary access with action name
+        # === STEP 3: For each neighbor, calculate target values and apply learning ===
+        for neighbor in neighbors_to_influence:
+            # Get all neighbors of this neighbor (for statistics)
+            # In NetLogo, this uses "households-on neighbors" which is the 8-cell neighborhood
+            # For simplicity, we use the same neighboring_households list
+            neighbor_hood = neighboring_households
+            
+            # Calculate target values (max of mean and median of neighborhood)
+            # Knowledge (know)
+            know_values = [hh.know for hh in neighbor_hood if hasattr(hh, 'know')]
+            if know_values:
+                know_mean = sum(know_values) / len(know_values)
+                know_median = sorted(know_values)[len(know_values)//2]
+                target_know = max(know_mean, know_median)
+            else:
+                target_know = neighbor.know
+            
+            # Climate/Environment Awareness (cee_aw)
+            cee_values = [hh.cee_aw for hh in neighbor_hood if hasattr(hh, 'cee_aw')]
+            if cee_values:
+                cee_mean = sum(cee_values) / len(cee_values)
+                cee_median = sorted(cee_values)[len(cee_values)//2]
+                target_cee = max(cee_mean, cee_median)
+            else:
+                target_cee = neighbor.cee_aw
+            
+            # Education Awareness (ed_aw)
+            ed_values = [hh.ed_aw for hh in neighbor_hood if hasattr(hh, 'ed_aw')]
+            if ed_values:
+                ed_mean = sum(ed_values) / len(ed_values)
+                ed_median = sorted(ed_values)[len(ed_values)//2]
+                target_ed = max(ed_mean, ed_median)
+            else:
+                target_ed = neighbor.ed_aw
+            
+            # Personal Norm for Investment (per_nab['investment'])
+            per_invest_values = [hh.per_nab.get('investment', 0) for hh in neighbor_hood]
+            if per_invest_values:
+                per_mean = sum(per_invest_values) / len(per_invest_values)
+                per_median = sorted(per_invest_values)[len(per_invest_values)//2]
+                target_per_invest = max(per_mean, per_median)
+            else:
+                target_per_invest = neighbor.per_nab.get('investment', 0)
+            
+            # Social Norm for Investment (su_nor['investment'])
+            su_invest_values = [hh.su_nor.get('investment', 0) for hh in neighbor_hood]
+            if su_invest_values:
+                su_mean = sum(su_invest_values) / len(su_invest_values)
+                su_median = sorted(su_invest_values)[len(su_invest_values)//2]
+                target_su_invest = max(su_mean, su_median)
+            else:
+                target_su_invest = neighbor.su_nor.get('investment', 0)
+            
+            # PBC for Switching (pbc['switching'])
+            pbc_switch_values = [hh.pbc.get('switching', 0) for hh in neighbor_hood]
+            if pbc_switch_values:
+                pbc_mean = sum(pbc_switch_values) / len(pbc_switch_values)
+                pbc_median = sorted(pbc_switch_values)[len(pbc_switch_values)//2]
+                target_pbc_switch = max(pbc_mean, pbc_median)
+            else:
+                target_pbc_switch = neighbor.pbc.get('switching', 0)
+            
+            # === STEP 4: Apply learning to neighbor ===
+            # Knowledge update
+            if neighbor.know < target_know and neighbor.know < 6.5:
+                if learning_type == "Fast adaptation":
+                    neighbor.know = min(neighbor.know * 1.05, BEHAVIORAL_SCALE_MAX)
+                elif learning_type == "Slow adaptation":
+                    neighbor.know = min(neighbor.know * 1.05, BEHAVIORAL_SCALE_MAX)
+            
+            # Climate awareness update
+            if neighbor.cee_aw < target_cee and neighbor.cee_aw < 6.5:
+                if learning_type == "Fast adaptation":
+                    neighbor.cee_aw = min(neighbor.cee_aw * 1.05, BEHAVIORAL_SCALE_MAX)
+                elif learning_type == "Slow adaptation":
+                    neighbor.cee_aw = min(neighbor.cee_aw * 1.05, BEHAVIORAL_SCALE_MAX)
+            
+            # Education awareness update
+            if neighbor.ed_aw < target_ed and neighbor.ed_aw < 6.5:
+                if learning_type == "Fast adaptation":
+                    neighbor.ed_aw = min(neighbor.ed_aw * 1.05, BEHAVIORAL_SCALE_MAX)
+                elif learning_type == "Slow adaptation":
+                    neighbor.ed_aw = min(neighbor.ed_aw * 1.05, BEHAVIORAL_SCALE_MAX)
+            
+            # Update awareness after knowledge changes
+            neighbor.update_awareness()
+            
+            # Personal norm for investment update
+            if neighbor.per_nab.get('investment', 0) < target_per_invest:
+                if learning_type == "Fast adaptation":
+                    neighbor.per_nab['investment'] = min(
+                        neighbor.per_nab.get('investment', 0) * 1.05,
+                        BEHAVIORAL_SCALE_MAX
+                    )
+                elif learning_type == "Slow adaptation":
+                    neighbor.per_nab['investment'] = min(
+                        neighbor.per_nab.get('investment', 0) * 1.05,
+                        BEHAVIORAL_SCALE_MAX
+                    )
+            
+            # Social norm for investment update
             if neighbor.su_nor.get('investment', 0) < target_su_invest:
-                neighbor.su_nor['investment'] = min(
-                    neighbor.su_nor.get('investment', 0) * 1.05,
-                    BEHAVIORAL_SCALE_MAX
-                )
-
-            # FIX: Use dictionary access with action name
+                if learning_type == "Fast adaptation":
+                    neighbor.su_nor['investment'] = min(
+                        neighbor.su_nor.get('investment', 0) * 1.07,
+                        BEHAVIORAL_SCALE_MAX
+                    )
+                elif learning_type == "Slow adaptation":
+                    neighbor.su_nor['investment'] = min(
+                        neighbor.su_nor.get('investment', 0) * 1.07,
+                        BEHAVIORAL_SCALE_MAX
+                    )
+            
+            # PBC for switching update
             if neighbor.pbc.get('switching', 0) < target_pbc_switch:
-                neighbor.pbc['switching'] = min(
-                    neighbor.pbc.get('switching', 0) * 1.05,
-                    BEHAVIORAL_SCALE_MAX
+                if learning_type == "Fast adaptation":
+                    neighbor.pbc['switching'] = min(
+                        neighbor.pbc.get('switching', 0) * 1.05,
+                        BEHAVIORAL_SCALE_MAX
+                    )
+                elif learning_type == "Slow adaptation":
+                    neighbor.pbc['switching'] = min(
+                        neighbor.pbc.get('switching', 0) * 1.05,
+                        BEHAVIORAL_SCALE_MAX
                 )
-
-        # Reinforce perceived behavioral control for the active household itself.
-        # FIX: Iterate over dictionary keys instead of range
-        for action in source_household.pbc:
-            source_household.pbc[action] = min(
-                source_household.pbc[action] * 1.05,
-                BEHAVIORAL_SCALE_MAX
-            )
 
     def recall_memory(self, household, initial_actions: Dict, 
                      income_group: int, energy_flag: int,

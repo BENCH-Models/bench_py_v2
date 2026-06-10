@@ -77,7 +77,8 @@ def run_single_job(config: dict, base_path: str, batch_output_root: str, seed: i
             base_path=base_path,
             output_root=batch_output_root,
             seed=seed,
-            carbon_price_awareness=config.get("carbon_price_awareness") 
+            carbon_price_awareness=config.get("carbon_price_awareness"),
+            satisfaction_regret=config.get("satisfaction_regret")
         )
         model.debug = config.get("debug", False)
         

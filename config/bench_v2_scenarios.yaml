@@ -7,6 +7,7 @@
   learning_type: No learning
   run_label: Baseline
   carbon_price_awareness: True
+  satisfaction_regret: True
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -14,6 +15,7 @@
   learning_type: Slow adaptation
   run_label: SD
   carbon_price_awareness: True
+  satisfaction_regret: True
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -21,6 +23,7 @@
   learning_type: Fast adaptation
   run_label: FD
   carbon_price_awareness: True
+  satisfaction_regret: True
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -28,6 +31,7 @@
   learning_type: Slow adaptation
   run_label: SDC
   carbon_price_awareness: True
+  satisfaction_regret: True
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -35,3 +39,4 @@
   learning_type: Fast adaptation
   run_label: FDC
   carbon_price_awareness: True
+  satisfaction_regret: True
