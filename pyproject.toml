@@ -8,4 +8,5 @@ dependencies = [
     "pandas",
     "matplotlib",
     "pyyaml>=6.0.3",
+    "joblib>=1.5.3",
 ]

@@ -1,5 +1,5 @@
 """
-BENCH Model - Main Entry Point
+BENCH Model - Main Entry Point (Parallelized with Joblib)
 Behavioral Energy Consumption Household Model in Pure Python
 
 Usage:
@@ -12,6 +12,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from joblib import Parallel, delayed
 
 # Add project root to path
 project_root = Path(__file__).parent
@@ -25,7 +26,7 @@ from utils.constants import DEFAULT_LEARNING_TYPE, OUTPUT_DIR, NUMBER_SEED_RUNS,
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Run BENCH model simulations from a configuration file for sensitivity analysis."
+        description="Run BENCH model simulations from a configuration file in parallel using joblib."
     )
     parser.add_argument(
         "--config-file", "-c",
@@ -46,49 +47,61 @@ def build_parser():
         action="store_true",
         help="Enable debug output during simulations."
     )
+    parser.add_argument(
+        "--workers", "-w",
+        type=int,
+        default=-1,
+        help="Number of CPU cores to utilize. -1 utilizes all available cores."
+    )
     return parser
 
 
-def run_model(config: dict, base_path: str, output_root: str = None, seed: int = None) -> bool:
-    # Explicitly ensure that run_label is provided, fallback to configuration metadata if missing
-    label = config.get("run_label")
-    if not label:
-        label = f"{config.get('scenario')}_{config.get('policy')}_{config.get('learning_type')}"
+def run_single_job(config: dict, base_path: str, batch_output_root: str, seed: int) -> bool:
+    """Target function executed across parallel workers."""
+    base_label = config.get("run_label")
+    if not base_label:
+        base_label = f"{config.get('scenario')}_{config.get('policy')}_{config.get('learning_type')}"
 
-    model = BENCHModel(
-        case_study=config.get("case_study", "Netherlands-Overijssel"),
-        scenario=config.get("scenario", "Ref_SSP2"),
-        policy=config.get("policy", "Ref"),
-        learning_type=config.get("learning_type", DEFAULT_LEARNING_TYPE),
-        run_label=label,  # Explicitly pass down the configuration key label
-        base_path=base_path,
-        output_root=output_root,
-        seed=seed,  # Pass the random seed to BENCHModel
-    )
-    model.debug = config.get("debug", False)
-    
-    if VERBOSE:
-        print(f"\n=== RUNNING: {model.run_id if hasattr(model, 'run_id') else config.get('run_label', label)} (Seed: {seed}) ===")
-    
-    success = model.run()
-    if not success:
-        print(f"✗ Run failed for seed {seed}")
-        return False
+    # CRITICAL FIX: Append the seed directly to the runtime label configuration.
+    # This guarantees that parallel worker nodes running within the same second
+    # generate entirely separate folder paths on the Windows file system.
+    unique_parallel_label = f"{base_label}_seed_{seed}"
 
-    # Get summary safely using the implementation present in BENCHModel or its components
-    summary = model.get_summary()
-    if VERBOSE and summary:
-        print("\nSEED RUN CUMULATIVE RESULTS:")
-        print("-" * 60)
-        print(f"Total Investment: €{summary.get('total_investment', 0):,.2f}")
-        print(f"Total Energy Saved: {summary.get('total_energy_saved', 0):,.0f} kWh")
-        print(f"Total Emissions Avoided: {summary.get('total_emissions_avoided', 0):,.0f} kg CO2")
-        print(f"Total Actions: {summary.get('actions_cumulative', 0):,.0f}")
-
-        print("\nExporting results...")
+    try:
+        model = BENCHModel(
+            case_study=config.get("case_study", "Netherlands-Overijssel"),
+            scenario=config.get("scenario", "Ref_SSP2"),
+            policy=config.get("policy", "Ref"),
+            learning_type=config.get("learning_type", DEFAULT_LEARNING_TYPE),
+            run_label=unique_parallel_label,  # Pass seed-isolated path label down
+            base_path=base_path,
+            output_root=batch_output_root,
+            seed=seed,  # Pass the random seed to BENCHModel
+        )
+        model.debug = config.get("debug", False)
         
-    files = model.export_results()
-    return True
+        # Run silently to avoid scrambled multi-core print overlapping
+        success = model.run(verbose=False) if hasattr(model, 'run') and 'verbose' in model.run.__code__.co_varnames else model.run()
+        if not success:
+            print(f"✗ Run failed for config '{base_label}' on seed {seed}")
+            return False
+
+        # Get summary safely using the implementation present in BENCHModel or its components
+        summary = model.get_summary()
+        if VERBOSE and summary:
+            print(f"\n=== RESULTS: {base_label} (Seed: {seed}) ===")
+            print("-" * 60)
+            print(f"Total Investment: €{summary.get('total_investment', 0):,.2f}")
+            print(f"Total Energy Saved: {summary.get('total_energy_saved', 0):,.0f} kWh")
+            print(f"Total Emissions Avoided: {summary.get('total_emissions_avoided', 0):,.0f} kg CO2")
+            print(f"Total Actions: {summary.get('actions_cumulative', 0):,.0f}")
+            
+        model.export_results()
+        return True
+
+    except Exception as e:
+        print(f"✗ Exception occurred on Configuration '{base_label}' | Seed {seed}: {e}")
+        return False
 
 
 def main():
@@ -113,23 +126,28 @@ def main():
         )
         print(f"Batch output root: {batch_output_root}")
 
-    all_success = True
-    for index, config in enumerate(configs, start=1):
-        config_label = config.get('run_label', 'Unnamed')
-        print(f"\n=== Configuration {index}/{len(configs)}: {config_label} ===")
+    # Build the linear task parameter combination list
+    tasks = []
+    for config in configs:
         config["debug"] = config.get("debug", args.debug)
-        
-        # Nested execution loop running NUMBER_SEED_RUNS times for the exact same parameters
         for seed_idx in range(NUMBER_SEED_RUNS):
-            print(f" -> Executing Seed Run {seed_idx + 1}/{NUMBER_SEED_RUNS} (Seed: {seed_idx})")
-            success = run_model(config, args.base_path, output_root=batch_output_root, seed=seed_idx)
-            if not success:
-                all_success = False
+            tasks.append((config, args.base_path, batch_output_root, seed_idx))
+
+    print(f"\nInitializing joblib Parallel Pool using n_jobs={args.workers}...")
+    print(f"Total stochastic runs to process: {len(tasks)}\n")
+
+    # Execute jobs concurrently with automated joblib tracking status output
+    results = Parallel(n_jobs=args.workers, verbose=10)(
+        delayed(run_single_job)(cfg, bp, out, sd) for cfg, bp, out, sd in tasks
+    )
+
+    all_success = all(results)
 
     if args.plot:
         if not args.config_file:
             print("Plotting requires --config-file when using --plot from main.py")
         else:
+            print("\nAll simulations completed. Beginning stochastic batch aggregation plots...")
             plot_batch_for_config(args.config_file, batch_output_root)
 
     return 0 if all_success else 1

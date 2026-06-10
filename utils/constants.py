@@ -6,7 +6,7 @@ Global constants and configuration for BENCH model
 MODEL_START_YEAR = 2015
 MODEL_END_YEAR = 2030
 TIMESTEP_YEARS = 1
-NUMBER_SEED_RUNS = 3
+NUMBER_SEED_RUNS = 100
 
 VERBOSE = False  # Set to True for detailed logging during model execution
 

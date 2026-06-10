@@ -7,7 +7,7 @@ import csv
 import json
 import pandas as pd
 from typing import Dict, List
-from utils.constants import OUTPUT_DIR
+from utils.constants import OUTPUT_DIR, VERBOSE
 
 try:
     import yaml
@@ -278,8 +278,8 @@ class ResultsExporter:
             List of exported file paths
         """
         files = []
-        
-        print("\nExporting simulation results...")
+        if VERBOSE:
+            print("\nExporting simulation results...")
         
         # Annual aggregates
         files.append(self.export_annual_aggregates(
@@ -306,6 +306,6 @@ class ResultsExporter:
             files.append(self.export_trajectory(
                 model.statistics, variable, start_year, end_year
             ))
-        
-        print(f"\n✓ All results exported to: {self.output_dir}")
+        if VERBOSE:
+            print(f"\n✓ All results exported to: {self.output_dir}")
         return files
