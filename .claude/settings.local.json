@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"C:\\\\Users\\\\torrenperaire\\\\Documents\\\\Code\\\\BENCH_py_v.4\")",
+      "Read(//c/Users/torrenperaire/Documents/Code/BENCH_py_v.4/**)"
+    ]
+  }
+}

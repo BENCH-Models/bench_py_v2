@@ -728,23 +728,30 @@ class BENCHModel:
             return
 
         for household in self.households:
-            # NetLogo checks if household has taken ANY action (act1, act50, or act3)
             if not (household.act1 or household.act50 or household.act3):
-                continue  # Skip inactive households
+                continue
 
-            # Get neighbors (8-cell grid neighborhood)
             neighbors = self._get_grid_neighbors(household)
-            
             if not neighbors:
                 continue
-            
-            # Apply learning
-            self.learning_mechanism.apply_learning(
-                household,
-                neighbors,
-                self.year,
-                self.learning_type
-            )
+
+            # Bug 2 fix: call one learning block per action taken, each updating only
+            # the norms for that action type (matches NetLogo's three separate learn blocks)
+            if household.act1:
+                self.learning_mechanism.apply_learning(
+                    household, neighbors, self.year, self.learning_type,
+                    'investment', get_neighbors_fn=self._get_grid_neighbors
+                )
+            if household.act50:
+                self.learning_mechanism.apply_learning(
+                    household, neighbors, self.year, self.learning_type,
+                    'conservation', get_neighbors_fn=self._get_grid_neighbors
+                )
+            if household.act3:
+                self.learning_mechanism.apply_learning(
+                    household, neighbors, self.year, self.learning_type,
+                    'switching', get_neighbors_fn=self._get_grid_neighbors
+                )
 
     def _update_energy_consumption(self) -> None:
         """

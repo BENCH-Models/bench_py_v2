@@ -18,9 +18,8 @@ class UtilityCalculator:
     def __init__(self):
         """Initialize utility calculator with empty population metrics."""
         self.z_max = {}
-        self.e_max_grey = 1.0   # Max consumption for grey (ff) users
-        self.e_max_brown = 1.0  # Max consumption for brown (lce) users
-        self.e_max_green = 1.0  # Max consumption for green (zero) users
+        self.e_max = 1.0         # Global max h_q across ALL households (NetLogo: e_lce_max = e_ff_max = global max)
+        self._e_max_actual = 1.0
     
     def normalize_budgets(self, households: List) -> None:
         """
@@ -34,50 +33,39 @@ class UtilityCalculator:
             'green': {'conservation': -float('inf'), 'investment': -float('inf')}  # No switching for green
         }
         
-        # Separate max consumption by energy source (matching NetLogo)
-        e_max_grey = -float('inf')   # For flag? = 0 (grey/ff users)
-        e_max_brown = -float('inf')  # For flag? = 1 (brown/lce users)  
-        e_max_green = -float('inf')  # For flag? = 2 (green/zero users)
-        
+        # Bug 1 fix: NetLogo uses a single global max h_q for ALL energy types
+        # (e_lce_max = e_ff_max = max [h_q] of households — same value for both)
+        e_max = -float('inf')
+
         for hh in households:
-            # Grey values - using dictionary access
+            # Grey values
             if hasattr(hh, 'z_grey') and 'conservation' in hh.z_grey:
                 z_max['grey']['conservation'] = max(z_max['grey']['conservation'], hh.z_grey['conservation'])
                 z_max['grey']['investment'] = max(z_max['grey']['investment'], hh.z_grey['investment'])
                 z_max['grey']['switching'] = max(z_max['grey']['switching'], hh.z_grey['switching'])
-            
+
             # Brown values
             if hasattr(hh, 'z_brown') and 'conservation' in hh.z_brown:
                 z_max['brown']['conservation'] = max(z_max['brown']['conservation'], hh.z_brown['conservation'])
                 z_max['brown']['investment'] = max(z_max['brown']['investment'], hh.z_brown['investment'])
                 z_max['brown']['switching'] = max(z_max['brown']['switching'], hh.z_brown['switching'])
-            
+
             # Green values (only conservation and investment)
             if hasattr(hh, 'z_green') and 'conservation' in hh.z_green:
                 z_max['green']['conservation'] = max(z_max['green']['conservation'], hh.z_green['conservation'])
                 z_max['green']['investment'] = max(z_max['green']['investment'], hh.z_green['investment'])
-            
-            # Track max consumption BY ENERGY SOURCE (NetLogo style)
-            if hh.flag == 0:  # Grey/FF user
-                if hh.h_q > e_max_grey:
-                    e_max_grey = hh.h_q
-            elif hh.flag == 1:  # Brown/LCE user
-                if hh.h_q > e_max_brown:
-                    e_max_brown = hh.h_q
-            else:  # Green/Zero user (flag == 2)
-                if hh.h_q > e_max_green:
-                    e_max_green = hh.h_q
-        
+
+            if hh.h_q > e_max:
+                e_max = hh.h_q
+
         # Replace -inf with 1.0 for safety
         for energy_type in z_max:
             for action in z_max[energy_type]:
                 if z_max[energy_type][action] <= 0 or z_max[energy_type][action] == float('-inf'):
                     z_max[energy_type][action] = 1.0
-        
+
         self.z_max = z_max
-        self.e_max_grey = e_max_grey if e_max_grey > 0 else 1.0
-        self.e_max_brown = e_max_brown if e_max_brown > 0 else 1.0
-        self.e_max_green = e_max_green if e_max_green > 0 else 1.0
+        self.e_max = e_max if e_max > 0 else 1.0
     
     def normalize_budget_values(self, household) -> None:
         """
@@ -107,11 +95,8 @@ class UtilityCalculator:
             household.z_green_norm['conservation'] = household.z_green['conservation'] / self.z_max['green']['conservation']
             household.z_green_norm['investment'] = household.z_green['investment'] / self.z_max['green']['investment']
         
-        # Store consumption normalization denominators based on energy source
-        # This matches NetLogo's e_lce_norm and e_ff_norm
-        household.e_norm_denom_grey = self.e_max_grey
-        household.e_norm_denom_brown = self.e_max_brown
-        household.e_norm_denom_green = self.e_max_green
+        # Bug 1 fix: single global denominator (NetLogo uses same max for all energy types)
+        household.e_norm_denom = self.e_max
     
     def calculate_expected_utility(self, household, energy_source: str, 
                                    action_type: str, alpha: float = ALPHA) -> float:
@@ -124,16 +109,16 @@ class UtilityCalculator:
             action_type: 'investment', 'conservation', or 'switching'
             alpha: Share of income spent on composite good
         """
-        # Check if household is low-paid (constraint from NetLogo)
-        if hasattr(household, 'hh_sta') and household.hh_sta == "Low-paid1":
+        # Bug 4 fix: Low-paid1 only blocks investment expected utility (NetLogo gates only act1 utility)
+        if action_type == 'investment' and hasattr(household, 'hh_sta') and household.hh_sta == "Low-paid1":
             return 0.0
-        
-        # Get behavioral factors - using dictionary access
-        K = household.K  # guilt factor (0-1)
+
+        # Get behavioral factors
+        K = household.K
         M = household.M.get(action_type, 0.0)
         pbc = household.pbc.get(action_type, 0.0)
         delta = household.delta.get(action_type, 0.0)
-        
+
         # Get normalized Z based on energy source and action type
         z_norm = 1.0
         z_dict_name = f'z_{energy_source}_norm'
@@ -141,15 +126,9 @@ class UtilityCalculator:
             z_dict = getattr(household, z_dict_name)
             if action_type in z_dict:
                 z_norm = z_dict[action_type]
-        
-        # Get normalized consumption based on energy source (NetLogo style)
-        # This is the key fix - use the correct denominator for each energy source
-        if energy_source == 'grey':
-            e_norm = household.h_q / household.e_norm_denom_grey if household.e_norm_denom_grey > 0 else 1.0
-        elif energy_source == 'brown':
-            e_norm = household.h_q / household.e_norm_denom_brown if household.e_norm_denom_brown > 0 else 1.0
-        else:  # green
-            e_norm = household.h_q / household.e_norm_denom_green if household.e_norm_denom_green > 0 else 1.0
+
+        # Bug 1 fix: single global e_norm denominator (NetLogo e_lce_max = e_ff_max = global max)
+        e_norm = household.h_q / household.e_norm_denom if household.e_norm_denom > 0 else 1.0
         
         # Check if delta is zero (NetLogo condition)
         if delta == 0:
@@ -268,17 +247,16 @@ class UtilityCalculator:
             # Get normalized z value (already set by _normalize_actual_budgets)
             z_norm = getattr(household, 'z_norm_actual', 1.0)
             
-            # Use the appropriate e_norm based on current flag
-            if household.flag == 0:  # Grey user
-                e_norm = household.h_q / self.e_max_grey if self.e_max_grey > 0 else 1.0
+            # Bug 1 fix: single global e_norm denominator (NetLogo e_lce_max = e_ff_max = global max)
+            e_norm = household.h_q / self._e_max_actual if self._e_max_actual > 0 else 1.0
+
+            if household.flag == 0:
                 target = 'grey'
                 actions_to_calc = ['investment', 'conservation', 'switching']
-            elif household.flag == 1:  # Brown user
-                e_norm = household.h_q / self.e_max_brown if self.e_max_brown > 0 else 1.0
+            elif household.flag == 1:
                 target = 'brown'
                 actions_to_calc = ['investment', 'conservation', 'switching']
-            else:  # Green user (flag == 2)
-                e_norm = household.h_q / self.e_max_green if self.e_max_green > 0 else 1.0
+            else:
                 target = 'green'
                 actions_to_calc = ['investment', 'conservation']
             
@@ -325,41 +303,43 @@ class UtilityCalculator:
             household.z_actual_green = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_brown) + h_invest + h_conserv_p + h_switch)
         
         # Second pass: find population-wide maximums
+        # Bug 1 fix: e_max is global across all households (NetLogo: e_lce_max = e_ff_max = global)
         z_brown_max = 1.0
         z_grey_max = 1.0
         z_green_max = 1.0
-        
-        # Find max for brown
+        e_max = 1.0
+
         brown_values = [hh.z_actual_brown for hh in households if hasattr(hh, 'z_actual_brown')]
         if brown_values:
             z_brown_max = max(brown_values)
-        
-        # Find max for grey
+
         grey_values = [hh.z_actual_grey for hh in households if hasattr(hh, 'z_actual_grey')]
         if grey_values:
             z_grey_max = max(grey_values)
-        
-        # Find max for green
+
         green_values = [hh.z_actual_green for hh in households if hasattr(hh, 'z_actual_green')]
         if green_values:
             z_green_max = max(green_values)
-        
-        # Ensure no division by zero
+
+        e_vals = [hh.h_q for hh in households if hh.h_q > 0]
+        if e_vals:
+            e_max = max(e_vals)
+
         z_brown_max = z_brown_max if z_brown_max > 0 else 1.0
         z_grey_max = z_grey_max if z_grey_max > 0 else 1.0
         z_green_max = z_green_max if z_green_max > 0 else 1.0
-        
-        # Third pass: normalize using population maximums
+        self._e_max_actual = e_max if e_max > 0 else 1.0
+
+        # Third pass: normalize
         for household in households:
             if hasattr(household, 'z_actual_brown'):
                 household.z_brown_norm_actual = household.z_actual_brown / z_brown_max
                 household.z_grey_norm_actual = household.z_actual_grey / z_grey_max
                 household.z_green_norm_actual = household.z_actual_green / z_green_max
-                
-                # Store the appropriate one based on current flag for easy access
-                if household.flag == 0:  # Grey user
+
+                if household.flag == 0:
                     household.z_norm_actual = household.z_grey_norm_actual
-                elif household.flag == 1:  # Brown user
+                elif household.flag == 1:
                     household.z_norm_actual = household.z_brown_norm_actual
-                else:  # Green user (flag == 2)
+                else:
                     household.z_norm_actual = household.z_green_norm_actual
