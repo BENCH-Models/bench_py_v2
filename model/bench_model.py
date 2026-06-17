@@ -724,6 +724,7 @@ class BENCHModel:
         Apply the selected learning algorithm to households after 2015.
         Matches NetLogo's learn procedure placement.
         """
+        
         if self.year < 2016 or self.learning_type == "No learning":
             return
 
