@@ -9,4 +9,6 @@ dependencies = [
     "matplotlib",
     "pyyaml>=6.0.3",
     "joblib>=1.5.3",
+    "numpy>=2.4.6",
+    "salib>=1.5.2",
 ]

@@ -602,16 +602,6 @@ class BENCHModel:
         - Conservation (act21/act40): 5 years before can conserve again
         - Switching (act32): 2 years before can switch again
         """
-        # Initialize cooldown counters if they don't exist (first run)
-        for household in self.households:
-            if not hasattr(household, 'act11_year'):
-                household.act11_year = 0
-                household.act12_year = 0
-                household.act21_year = 0
-                household.act40_year = 0
-                household.act31_year = 0
-                household.act32_year = 0
-        
         # First: Increment counters for actions that are currently active
         for household in self.households:
             # Investment counters (act11 for brown/green, act12 for grey)

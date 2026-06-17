@@ -208,6 +208,23 @@ class Household:
         # For normalization denominators
         self.e_norm_denom = 1.0
 
+        # Actual-utility intermediate z values (set each year in _normalize_actual_budgets)
+        self.z_actual_brown = 0.0
+        self.z_actual_grey = 0.0
+        self.z_actual_green = 0.0
+        self.z_norm_actual = 0.0
+        self.z_brown_norm_actual = 0.0
+        self.z_grey_norm_actual = 0.0
+        self.z_green_norm_actual = 0.0
+
+        # Action cooldown year counters (set each year in _update_memory)
+        self.act11_year = 0
+        self.act12_year = 0
+        self.act21_year = 0
+        self.act40_year = 0
+        self.act31_year = 0
+        self.act32_year = 0
+
     def set_income_for_year(self, year: int) -> None:
         """Updates the active annual income using the time series trajectory."""
         if self.income_trajectory and year in self.income_trajectory:

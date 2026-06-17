@@ -25,6 +25,15 @@ class StatisticsAggregator:
     def __init__(self):
         self.annual_stats: Dict = {}
         self.income_group_annual_stats: Dict = {}  # {year: {group_id: {...}}}
+        # Cached static arrays (income groups never change after init)
+        self._ig_groups: np.ndarray = None
+        self._ig_income: np.ndarray = None
+        self._ig_masks: Dict[int, np.ndarray] = {}
+
+    def _build_income_group_cache(self, households: List) -> None:
+        self._ig_groups = np.array([hh.h_income_group for hh in households], dtype=np.int8)
+        self._ig_income = np.array([hh.h_income        for hh in households], dtype=np.float64)
+        self._ig_masks  = {g: self._ig_groups == g for g in range(1, 8)}
 
     def aggregate_population_stats(self, households: List, year: int) -> Dict:
         """
@@ -120,20 +129,23 @@ class StatisticsAggregator:
 
     def aggregate_by_income_group(self, households: List, year: int) -> Dict[int, Dict]:
         """Aggregate statistics by income group (1-7)."""
-        # group index arrays
-        groups = np.array([hh.h_income_group for hh in households], dtype=np.int8)
-        income  = np.array([hh.h_income  for hh in households], dtype=np.float64)
-        h_q     = np.array([hh.h_q       for hh in households], dtype=np.float64)
-        act1    = np.array([hh.act1       for hh in households], dtype=bool)
-        act2    = np.array([hh.act2       for hh in households], dtype=bool)
-        act3    = np.array([hh.act3       for hh in households], dtype=bool)
-        h_invest = np.array([hh.h_invest  for hh in households], dtype=np.float64)
-        em_avoided = np.array([sum(hh.em_avoided.values()) for hh in households], dtype=np.float64)
-        h_aware    = np.array([hh.h_aware  for hh in households], dtype=np.float64)
+        # Build static cache on first call (income groups never change)
+        if self._ig_groups is None:
+            self._build_income_group_cache(households)
+
+        # Dynamic arrays only (change each year)
+        h_q      = np.array([hh.h_q      for hh in households], dtype=np.float64)
+        act1     = np.array([hh.act1      for hh in households], dtype=bool)
+        act2     = np.array([hh.act2      for hh in households], dtype=bool)
+        act3     = np.array([hh.act3      for hh in households], dtype=bool)
+        h_invest   = np.array([hh.h_invest                    for hh in households], dtype=np.float64)
+        em_avoided = np.array([sum(hh.em_avoided.values())    for hh in households], dtype=np.float64)
+        h_aware    = np.array([hh.h_aware                     for hh in households], dtype=np.float64)
+        income     = self._ig_income  # static — doesn't change within a run
 
         stats_by_group: Dict[int, Dict] = {}
         for g in range(1, 8):
-            mask = groups == g
+            mask = self._ig_masks[g]
             cnt = int(mask.sum())
             if cnt == 0:
                 stats_by_group[g] = {}

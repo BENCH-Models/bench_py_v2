@@ -3,6 +3,9 @@ Utility calculation and preference modeling for household decisions
 """
 
 from typing import Dict, List
+
+import numpy as np
+
 from utils.constants import (
     UTILITY_NORMALIZATION_FACTOR as ALPHA,
     BEHAVIORAL_SCALE_MAX
@@ -26,45 +29,27 @@ class UtilityCalculator:
         Finds the maximum values for each variable across the entire population.
         Matches NetLogo's normalize-1 procedure.
         """
-        # Initialize max trackers using dictionary structure
-        z_max = {
-            'grey': {'conservation': -float('inf'), 'investment': -float('inf'), 'switching': -float('inf')},
-            'brown': {'conservation': -float('inf'), 'investment': -float('inf'), 'switching': -float('inf')},
-            'green': {'conservation': -float('inf'), 'investment': -float('inf')}  # No switching for green
+        # Build arrays once — faster than per-household max() comparisons
+        zgc = np.fromiter((hh.z_grey['conservation']  for hh in households), float, len(households))
+        zgi = np.fromiter((hh.z_grey['investment']    for hh in households), float, len(households))
+        zgs = np.fromiter((hh.z_grey['switching']     for hh in households), float, len(households))
+        zbc = np.fromiter((hh.z_brown['conservation'] for hh in households), float, len(households))
+        zbi = np.fromiter((hh.z_brown['investment']   for hh in households), float, len(households))
+        zbs = np.fromiter((hh.z_brown['switching']    for hh in households), float, len(households))
+        znc = np.fromiter((hh.z_green['conservation'] for hh in households), float, len(households))
+        zni = np.fromiter((hh.z_green['investment']   for hh in households), float, len(households))
+        e_arr = np.fromiter((hh.h_q for hh in households), float, len(households))
+
+        def _safe_max(arr):
+            v = float(arr.max())
+            return v if v > 0 else 1.0
+
+        self.z_max = {
+            'grey':  {'conservation': _safe_max(zgc), 'investment': _safe_max(zgi), 'switching': _safe_max(zgs)},
+            'brown': {'conservation': _safe_max(zbc), 'investment': _safe_max(zbi), 'switching': _safe_max(zbs)},
+            'green': {'conservation': _safe_max(znc), 'investment': _safe_max(zni)},
         }
-        
-        # Bug 1 fix: NetLogo uses a single global max h_q for ALL energy types
-        # (e_lce_max = e_ff_max = max [h_q] of households — same value for both)
-        e_max = -float('inf')
-
-        for hh in households:
-            # Grey values
-            if hasattr(hh, 'z_grey') and 'conservation' in hh.z_grey:
-                z_max['grey']['conservation'] = max(z_max['grey']['conservation'], hh.z_grey['conservation'])
-                z_max['grey']['investment'] = max(z_max['grey']['investment'], hh.z_grey['investment'])
-                z_max['grey']['switching'] = max(z_max['grey']['switching'], hh.z_grey['switching'])
-
-            # Brown values
-            if hasattr(hh, 'z_brown') and 'conservation' in hh.z_brown:
-                z_max['brown']['conservation'] = max(z_max['brown']['conservation'], hh.z_brown['conservation'])
-                z_max['brown']['investment'] = max(z_max['brown']['investment'], hh.z_brown['investment'])
-                z_max['brown']['switching'] = max(z_max['brown']['switching'], hh.z_brown['switching'])
-
-            # Green values (only conservation and investment)
-            if hasattr(hh, 'z_green') and 'conservation' in hh.z_green:
-                z_max['green']['conservation'] = max(z_max['green']['conservation'], hh.z_green['conservation'])
-                z_max['green']['investment'] = max(z_max['green']['investment'], hh.z_green['investment'])
-
-            if hh.h_q > e_max:
-                e_max = hh.h_q
-
-        # Replace -inf with 1.0 for safety
-        for energy_type in z_max:
-            for action in z_max[energy_type]:
-                if z_max[energy_type][action] <= 0 or z_max[energy_type][action] == float('-inf'):
-                    z_max[energy_type][action] = 1.0
-
-        self.z_max = z_max
+        e_max = float(e_arr.max())
         self.e_max = e_max if e_max > 0 else 1.0
     
     def normalize_budget_values(self, household) -> None:
@@ -72,29 +57,24 @@ class UtilityCalculator:
         Normalizes a single household's Z values against the population maximums.
         Also normalizes consumption based on the household's energy source.
         """
-        # Initialize normalized dictionaries if they don't exist
-        if not hasattr(household, 'z_grey_norm'):
-            household.z_grey_norm = {'conservation': 0.0, 'investment': 0.0, 'switching': 0.0}
-            household.z_brown_norm = {'conservation': 0.0, 'investment': 0.0, 'switching': 0.0}
-            household.z_green_norm = {'conservation': 0.0, 'investment': 0.0}
-        
-        # Grey normalization
-        if hasattr(household, 'z_grey'):
-            household.z_grey_norm['conservation'] = household.z_grey['conservation'] / self.z_max['grey']['conservation']
-            household.z_grey_norm['investment'] = household.z_grey['investment'] / self.z_max['grey']['investment']
-            household.z_grey_norm['switching'] = household.z_grey['switching'] / self.z_max['grey']['switching']
-        
-        # Brown normalization
-        if hasattr(household, 'z_brown'):
-            household.z_brown_norm['conservation'] = household.z_brown['conservation'] / self.z_max['brown']['conservation']
-            household.z_brown_norm['investment'] = household.z_brown['investment'] / self.z_max['brown']['investment']
-            household.z_brown_norm['switching'] = household.z_brown['switching'] / self.z_max['brown']['switching']
-        
-        # Green normalization
-        if hasattr(household, 'z_green'):
-            household.z_green_norm['conservation'] = household.z_green['conservation'] / self.z_max['green']['conservation']
-            household.z_green_norm['investment'] = household.z_green['investment'] / self.z_max['green']['investment']
-        
+        gm = self.z_max['grey']
+        bm = self.z_max['brown']
+        nm = self.z_max['green']
+
+        zg = household.z_grey
+        household.z_grey_norm['conservation'] = zg['conservation'] / gm['conservation']
+        household.z_grey_norm['investment']   = zg['investment']   / gm['investment']
+        household.z_grey_norm['switching']    = zg['switching']    / gm['switching']
+
+        zb = household.z_brown
+        household.z_brown_norm['conservation'] = zb['conservation'] / bm['conservation']
+        household.z_brown_norm['investment']   = zb['investment']   / bm['investment']
+        household.z_brown_norm['switching']    = zb['switching']    / bm['switching']
+
+        zn = household.z_green
+        household.z_green_norm['conservation'] = zn['conservation'] / nm['conservation']
+        household.z_green_norm['investment']   = zn['investment']   / nm['investment']
+
         # Bug 1 fix: single global denominator (NetLogo uses same max for all energy types)
         household.e_norm_denom = self.e_max
     
@@ -110,7 +90,7 @@ class UtilityCalculator:
             alpha: Share of income spent on composite good
         """
         # Bug 4 fix: Low-paid1 only blocks investment expected utility (NetLogo gates only act1 utility)
-        if action_type == 'investment' and hasattr(household, 'hh_sta') and household.hh_sta == "Low-paid1":
+        if action_type == 'investment' and household.hh_sta == "Low-paid1":
             return 0.0
 
         # Get behavioral factors
@@ -119,13 +99,8 @@ class UtilityCalculator:
         pbc = household.pbc.get(action_type, 0.0)
         delta = household.delta.get(action_type, 0.0)
 
-        # Get normalized Z based on energy source and action type
-        z_norm = 1.0
-        z_dict_name = f'z_{energy_source}_norm'
-        if hasattr(household, z_dict_name):
-            z_dict = getattr(household, z_dict_name)
-            if action_type in z_dict:
-                z_norm = z_dict[action_type]
+        # Get normalized Z — all z_*_norm dicts are guaranteed present (initialised in Household.__init__)
+        z_norm = getattr(household, f'z_{energy_source}_norm').get(action_type, 1.0)
 
         # Bug 1 fix: single global e_norm denominator (NetLogo e_lce_max = e_ff_max = global max)
         e_norm = household.h_q / household.e_norm_denom if household.e_norm_denom > 0 else 1.0
@@ -147,14 +122,6 @@ class UtilityCalculator:
         Calculate all expected utilities for a household using dictionary structure.
         Matches NetLogo's utility_exp_NAT procedure with action constraints.
         """
-        # Initialize utility dictionaries if they don't exist
-        if not hasattr(household, 'utility_exp'):
-            household.utility_exp = {
-                'grey': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0},
-                'brown': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0},
-                'green': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0}
-            }
-        
         # Reset all utilities to 0
         for energy in household.utility_exp:
             for action in household.utility_exp[energy]:
@@ -228,14 +195,6 @@ class UtilityCalculator:
         self._normalize_actual_budgets(households, prices)
         
         for household in households:
-            # Initialize actual utility dictionaries if they don't exist
-            if not hasattr(household, 'utility_actual'):
-                household.utility_actual = {
-                    'grey': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0},
-                    'brown': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0},
-                    'green': {'investment': 0.0, 'conservation': 0.0, 'switching': 0.0}
-                }
-            
             # Reset all actual utilities
             for energy in household.utility_actual:
                 for action in household.utility_actual[energy]:
@@ -302,44 +261,31 @@ class UtilityCalculator:
             household.z_actual_grey = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_grey) + h_invest + h_conserv_p + h_switch)
             household.z_actual_green = h_income - ((h_q * m_p_brown) + (h_invest_save * m_p_brown) + h_invest + h_conserv_p + h_switch)
         
-        # Second pass: find population-wide maximums
+        # Second pass: find population-wide maximums using numpy (skip h_q<=0 households)
         # Bug 1 fix: e_max is global across all households (NetLogo: e_lce_max = e_ff_max = global)
-        z_brown_max = 1.0
-        z_grey_max = 1.0
-        z_green_max = 1.0
-        e_max = 1.0
+        active = [hh for hh in households if hh.h_q > 0]
+        if active:
+            ab = np.fromiter((hh.z_actual_brown for hh in active), float, len(active))
+            ag = np.fromiter((hh.z_actual_grey  for hh in active), float, len(active))
+            an = np.fromiter((hh.z_actual_green for hh in active), float, len(active))
+            eq = np.fromiter((hh.h_q            for hh in active), float, len(active))
+            z_brown_max = float(ab.max()); z_brown_max = z_brown_max if z_brown_max > 0 else 1.0
+            z_grey_max  = float(ag.max()); z_grey_max  = z_grey_max  if z_grey_max  > 0 else 1.0
+            z_green_max = float(an.max()); z_green_max = z_green_max if z_green_max > 0 else 1.0
+            self._e_max_actual = float(eq.max()); self._e_max_actual = self._e_max_actual if self._e_max_actual > 0 else 1.0
+        else:
+            z_brown_max = z_grey_max = z_green_max = 1.0
+            self._e_max_actual = 1.0
 
-        brown_values = [hh.z_actual_brown for hh in households if hasattr(hh, 'z_actual_brown')]
-        if brown_values:
-            z_brown_max = max(brown_values)
+        # Third pass: normalize (only active households; others keep 0.0 defaults)
+        for household in active:
+            household.z_brown_norm_actual = household.z_actual_brown / z_brown_max
+            household.z_grey_norm_actual  = household.z_actual_grey  / z_grey_max
+            household.z_green_norm_actual = household.z_actual_green / z_green_max
 
-        grey_values = [hh.z_actual_grey for hh in households if hasattr(hh, 'z_actual_grey')]
-        if grey_values:
-            z_grey_max = max(grey_values)
-
-        green_values = [hh.z_actual_green for hh in households if hasattr(hh, 'z_actual_green')]
-        if green_values:
-            z_green_max = max(green_values)
-
-        e_vals = [hh.h_q for hh in households if hh.h_q > 0]
-        if e_vals:
-            e_max = max(e_vals)
-
-        z_brown_max = z_brown_max if z_brown_max > 0 else 1.0
-        z_grey_max = z_grey_max if z_grey_max > 0 else 1.0
-        z_green_max = z_green_max if z_green_max > 0 else 1.0
-        self._e_max_actual = e_max if e_max > 0 else 1.0
-
-        # Third pass: normalize
-        for household in households:
-            if hasattr(household, 'z_actual_brown'):
-                household.z_brown_norm_actual = household.z_actual_brown / z_brown_max
-                household.z_grey_norm_actual = household.z_actual_grey / z_grey_max
-                household.z_green_norm_actual = household.z_actual_green / z_green_max
-
-                if household.flag == 0:
-                    household.z_norm_actual = household.z_grey_norm_actual
-                elif household.flag == 1:
-                    household.z_norm_actual = household.z_brown_norm_actual
-                else:
-                    household.z_norm_actual = household.z_green_norm_actual
+            if household.flag == 0:
+                household.z_norm_actual = household.z_grey_norm_actual
+            elif household.flag == 1:
+                household.z_norm_actual = household.z_brown_norm_actual
+            else:
+                household.z_norm_actual = household.z_green_norm_actual

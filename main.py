@@ -33,9 +33,9 @@ def build_parser():
         help="Path to a JSON or YAML configuration file defining one or more model runs."
     )
     parser.add_argument(
-        "--plot", "-p",
+        "--no-plot",
         action="store_true",
-        help="Generate plots for each completed run."
+        help="Skip plot generation after simulations complete."
     )
     parser.add_argument(
         "--base-path", "-b",
@@ -149,12 +149,9 @@ def main():
 
     all_success = all(results)
 
-    if args.plot:
-        if not args.config_file:
-            print("Plotting requires --config-file when using --plot from main.py")
-        else:
-            print("\nAll simulations completed. Beginning stochastic batch aggregation plots...")
-            plot_batch_for_config(args.config_file, batch_output_root)
+    if not args.no_plot and batch_output_root:
+        print("\nAll simulations completed. Beginning stochastic batch aggregation plots...")
+        plot_batch_for_config(args.config_file, batch_output_root)
 
     return 0 if all_success else 1
 
