@@ -120,32 +120,21 @@ class ResultsExporter:
     def export_actions_by_group(self, stats_aggregator,
                                start_year: int, end_year: int,
                                filename: str = "actions_by_income_group.csv") -> str:
-        """
-        Export actions aggregated by income group.
-        
-        Args:
-            stats_aggregator: StatisticsAggregator instance
-            start_year: First year
-            end_year: Last year
-            filename: Output filename
-            
-        Returns:
-            Path to saved file
-        """
+        """Export per-income-group statistics for all simulation years."""
         output_path = os.path.join(self.output_dir, filename)
-        
+
         rows = []
         for year in range(start_year, end_year + 1):
-            # This would need income group stats stored in aggregator
-            # Simplified version below
-            rows.append({
-                'year': year,
-                'note': 'Income group breakdowns would be stored and exported here'
-            })
-        
-        df = pd.DataFrame(rows)
-        df.to_csv(output_path, index=False)
-        
+            year_data = stats_aggregator.income_group_annual_stats.get(year, {})
+            for group_id, gstats in year_data.items():
+                if not gstats:
+                    continue
+                row = {'year': year, 'income_group': group_id}
+                row.update(gstats)
+                rows.append(row)
+
+        if rows:
+            pd.DataFrame(rows).to_csv(output_path, index=False)
         return output_path
     
     def export_summary_report(self, stats_aggregator,
@@ -278,6 +267,11 @@ class ResultsExporter:
         
         # Annual aggregates
         files.append(self.export_annual_aggregates(
+            model.statistics, start_year, end_year
+        ))
+
+        # Income-group breakdown
+        files.append(self.export_actions_by_group(
             model.statistics, start_year, end_year
         ))
         

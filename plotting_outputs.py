@@ -257,6 +257,169 @@ def plot_combined_actions(batch_data: List[Tuple[str, List[pd.DataFrame]]],
     return output_path
 
 
+def plot_energy_by_type(batch_data: List[Tuple[str, List[pd.DataFrame]]],
+                        x_col: str, plots_dir: str) -> str:
+    """Stacked area chart of mean consumption split by grey / brown / green."""
+    fig, axes = plt.subplots(1, len(batch_data), figsize=(6 * len(batch_data), 5), squeeze=False)
+
+    for ax, (label, dfs) in zip(axes[0], batch_data):
+        cols = ['consumption_grey', 'consumption_brown', 'consumption_green']
+        colors = ['#888888', '#a0522d', '#3cb371']
+        names  = ['Grey (fossil)', 'Brown (mixed)', 'Green (renewable)']
+
+        x_values = None
+        matrices = {c: [] for c in cols}
+        for df in dfs:
+            if x_col not in df.columns:
+                continue
+            df_s = df.sort_values(by=x_col)
+            if x_values is None:
+                x_values = df_s[x_col].values
+            for c in cols:
+                if c in df_s.columns:
+                    matrices[c].append(df_s[c].values)
+
+        if x_values is None or not matrices[cols[0]]:
+            ax.set_title(f"{label}\n(no data)")
+            continue
+
+        means = [np.mean(np.array(matrices[c]), axis=0) if matrices[c] else np.zeros_like(x_values)
+                 for c in cols]
+        ax.stackplot(x_values, *means, labels=names, colors=colors, alpha=0.75)
+        ax.set_title(label, fontsize=11, fontweight='bold')
+        ax.set_xlabel('Year', fontsize=10)
+        ax.set_ylabel('Consumption (kWh)', fontsize=10)
+        ax.legend(fontsize=8, loc='upper right')
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+    fig.suptitle('Energy Consumption by Type', fontsize=13, fontweight='bold')
+    plt.tight_layout()
+    output_path = os.path.join(plots_dir, 'batch_energy_by_type.png')
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+    return output_path
+
+
+def plot_awareness_motivation(batch_data: List[Tuple[str, List[pd.DataFrame]]],
+                              x_col: str, plots_dir: str) -> str:
+    """Line plot of avg_awareness and avg_motivation trajectories with 95% CI."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+
+    for label, dfs in batch_data:
+        for ax, var, var_label in [
+            (ax1, 'avg_awareness', 'Average Awareness'),
+            (ax2, 'avg_motivation', 'Average Motivation'),
+        ]:
+            matrix, x_values = [], None
+            for df in dfs:
+                if x_col not in df.columns or var not in df.columns:
+                    continue
+                df_s = df.sort_values(by=x_col)
+                if x_values is None:
+                    x_values = df_s[x_col].values
+                matrix.append(df_s[var].values)
+
+            if not matrix or x_values is None:
+                continue
+
+            arr = np.array(matrix)
+            mean = arr.mean(axis=0)
+            line, = ax.plot(x_values, mean, label=label, marker='o', linewidth=2, markersize=4)
+            if arr.shape[0] > 1:
+                se = arr.std(axis=0, ddof=1) / np.sqrt(arr.shape[0])
+                ax.fill_between(x_values, mean - 1.96 * se, mean + 1.96 * se,
+                                color=line.get_color(), alpha=0.15)
+
+        ax1.set_title('Awareness Trajectory (95% CI)', fontsize=11, fontweight='bold')
+        ax1.set_xlabel('Year', fontsize=10); ax1.set_ylabel('Score (0-7)', fontsize=10)
+        ax1.legend(fontsize=9); ax1.grid(True, linestyle='--', alpha=0.4)
+
+        ax2.set_title('Motivation Trajectory (95% CI)', fontsize=11, fontweight='bold')
+        ax2.set_xlabel('Year', fontsize=10); ax2.set_ylabel('Score (0-7)', fontsize=10)
+        ax2.legend(fontsize=9); ax2.grid(True, linestyle='--', alpha=0.4)
+
+    plt.tight_layout()
+    output_path = os.path.join(plots_dir, 'batch_awareness_motivation.png')
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+    return output_path
+
+
+def plot_income_group_actions(output_root: str, configs: List[Dict],
+                              plots_dir: str) -> str:
+    """
+    Bar chart of cumulative action counts (investment / conservation / switching)
+    broken down by income group, averaged across seeds.
+    Reads actions_by_income_group.csv from each matched run folder.
+    """
+    all_subfolders = sorted([
+        f for f in glob.glob(os.path.join(output_root, "*")) if os.path.isdir(f)
+    ])
+
+    action_cols  = ['action_1_count', 'action_2_count', 'action_3_count']
+    action_names = ['Investment', 'Conservation', 'Switching']
+    bar_colors   = ['#2E86AB', '#A23B72', '#F18F01']
+    n_groups     = 7
+    x            = np.arange(n_groups)
+    width        = 0.8 / max(len(configs), 1) / len(action_cols)
+
+    fig, ax = plt.subplots(figsize=(13, 6))
+    plotted = False
+
+    for cfg_idx, config in enumerate(configs):
+        label = config.get('run_label', '')
+        if not label:
+            continue
+        matched = [f for f in all_subfolders
+                   if os.path.basename(f).endswith(f'_{label}')
+                   or f'_{label}_' in os.path.basename(f)
+                   or os.path.basename(f) == label]
+
+        dfs = []
+        for folder in matched:
+            csv_path = os.path.join(folder, 'actions_by_income_group.csv')
+            if os.path.exists(csv_path):
+                try:
+                    dfs.append(pd.read_csv(csv_path))
+                except Exception:
+                    pass
+
+        if not dfs:
+            continue
+
+        combined = pd.concat(dfs, ignore_index=True)
+        # Sum across all years, then average across seeds (# seeds = # matched folders)
+        group_totals = combined.groupby('income_group')[action_cols].sum() / max(len(dfs), 1)
+
+        for a_idx, (col, name, color) in enumerate(zip(action_cols, action_names, bar_colors)):
+            if col not in group_totals.columns:
+                continue
+            offset = (cfg_idx * len(action_cols) + a_idx) * width
+            vals = [group_totals.loc[g, col] if g in group_totals.index else 0 for g in range(1, 8)]
+            ax.bar(x + offset, vals, width, label=f"{label} – {name}", color=color,
+                   alpha=0.7 if cfg_idx == 0 else 0.4,
+                   hatch='' if cfg_idx == 0 else '//')
+            plotted = True
+
+    if not plotted:
+        plt.close()
+        return ''
+
+    ax.set_xticks(x + width * (len(configs) * len(action_cols) - 1) / 2)
+    ax.set_xticklabels([f"Group {g}" for g in range(1, 8)], fontsize=10)
+    ax.set_title('Cumulative Actions by Income Group (mean across seeds)', fontsize=13, fontweight='bold')
+    ax.set_xlabel('Income Group', fontsize=11)
+    ax.set_ylabel('Cumulative Action Count', fontsize=11)
+    ax.legend(fontsize=8, loc='upper left', ncol=3)
+    ax.grid(True, axis='y', linestyle='--', alpha=0.4)
+    plt.tight_layout()
+
+    output_path = os.path.join(plots_dir, 'batch_income_group_actions.png')
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+    return output_path
+
+
 def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     from utils.config_loader import load_config_file
     print(f"Loading batch configurations from: {config_file_path}")
@@ -302,7 +465,25 @@ def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     if combined_plot_path:
         saved_plots.append(combined_plot_path)
         print(f"✓ Created combined actions plot: {combined_plot_path}")
-            
+
+    # Energy by type (stacked area)
+    energy_type_path = plot_energy_by_type(batch_data, 'year', plots_dir)
+    if energy_type_path:
+        saved_plots.append(energy_type_path)
+        print(f"✓ Created energy-by-type plot: {energy_type_path}")
+
+    # Awareness and motivation trajectories
+    aw_mot_path = plot_awareness_motivation(batch_data, 'year', plots_dir)
+    if aw_mot_path:
+        saved_plots.append(aw_mot_path)
+        print(f"✓ Created awareness/motivation plot: {aw_mot_path}")
+
+    # Income-group action bar chart
+    ig_path = plot_income_group_actions(output_root, configs, plots_dir)
+    if ig_path:
+        saved_plots.append(ig_path)
+        print(f"✓ Created income-group actions plot: {ig_path}")
+
     print(f"✓ Stochastic batch plots successfully saved inside directory: {plots_dir}")
     return saved_plots
 

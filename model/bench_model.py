@@ -293,7 +293,7 @@ class BENCHModel:
             return False
         
     def _place_households_on_grid(self) -> None:
-        """Place households onto a rectangular grid and index their neighbors."""
+        """Place households onto a rectangular grid and precompute neighbor lists."""
         if self.n_households == 0:
             return
 
@@ -317,23 +317,28 @@ class BENCHModel:
             for household in self.households
         }
 
-    def _get_grid_neighbors(self, household) -> List[Household]:
-        """Return the 8 adjacent grid neighbors for a household."""
-        if not hasattr(household, 'grid_x') or not hasattr(household, 'grid_y'):
-            return []
+        # Upgrade 1: precompute neighbor lists once at init (O(1) per lookup thereafter)
+        self._nbr_cache: dict = {
+            hh.h_id: self._get_grid_neighbors_raw(hh)
+            for hh in self.households
+        }
 
-        adjacent_positions = [
-            (household.grid_x + dx, household.grid_y + dy)
+    def _get_grid_neighbors_raw(self, household) -> List[Household]:
+        """Raw 8-cell lookup used only during grid setup to populate the cache."""
+        if not hasattr(household, 'grid_x'):
+            return []
+        return [
+            self.grid_index[pos]
             for dx in (-1, 0, 1)
             for dy in (-1, 0, 1)
             if not (dx == 0 and dy == 0)
-        ]
-
-        return [
-            self.grid_index[pos]
-            for pos in adjacent_positions
+            for pos in [(household.grid_x + dx, household.grid_y + dy)]
             if pos in self.grid_index
         ]
+
+    def _get_grid_neighbors(self, household) -> List[Household]:
+        """Return precomputed 8-cell neighbors for a household (O(1) lookup)."""
+        return self._nbr_cache.get(household.h_id, [])
 
     def _apply_satisfaction_and_regret(self) -> None:
         """Apply satisfaction and regret for households that took actions in previous years."""
@@ -455,6 +460,8 @@ class BENCHModel:
         # === RECORD STATISTICS ===
         stats = self.statistics.aggregate_population_stats(self.households, self.year)
         self.statistics.store_annual_stats(self.year, stats)
+        ig_stats = self.statistics.aggregate_by_income_group(self.households, self.year)
+        self.statistics.store_income_group_stats(self.year, ig_stats)
         
         self.year += 1
         return True

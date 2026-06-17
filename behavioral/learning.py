@@ -8,6 +8,12 @@ from utils.constants import (
     BEHAVIORAL_SCALE_MAX,
     MEMORY_RULES
 )
+from utils.params import (
+    BEHAVIORAL_CAP,
+    LEARN_AWARENESS_RATE_FAST, LEARN_AWARENESS_RATE_SLOW,
+    LEARN_PER_NAB_PBC_RATE, LEARN_SU_NOR_RATE,
+    SLOW_LEARN_MIN_NEIGHBORS,
+)
 
 class LearningMechanism:
     """
@@ -45,8 +51,8 @@ class LearningMechanism:
 
         # === STEP 1: Self-reinforce PBC for the source household (action-specific) ===
         pbc_val = source_household.pbc.get(action_type, 0)
-        if pbc_val < 6.5:
-            rate = 1.05 if learning_type == "Fast adaptation" else 1.02
+        if pbc_val < BEHAVIORAL_CAP:
+            rate = LEARN_AWARENESS_RATE_FAST if learning_type == "Fast adaptation" else LEARN_AWARENESS_RATE_SLOW
             source_household.pbc[action_type] = min(pbc_val * rate, BEHAVIORAL_SCALE_MAX)
 
         if not neighboring_households:
@@ -54,7 +60,7 @@ class LearningMechanism:
 
         # === STEP 2: Select neighbours to influence ===
         if learning_type == "Slow adaptation":
-            if len(neighboring_households) < 2:
+            if len(neighboring_households) < SLOW_LEARN_MIN_NEIGHBORS:
                 return  # NetLogo: only runs when count out-link-neighbors >= 2
             neighbors_to_influence = random.sample(neighboring_households, 2)
         else:
@@ -83,29 +89,28 @@ class LearningMechanism:
             target_cee  = _target([h.cee_aw for h in nbr_nbrs], source_household.cee_aw)
             target_ed   = _target([h.ed_aw for h in nbr_nbrs], source_household.ed_aw)
 
-            # Knowledge / awareness: conditional on (< target AND < 6.5), 5% rate
-            if neighbor.know < target_know and neighbor.know < 6.5:
-                neighbor.know = min(neighbor.know * 1.05, BEHAVIORAL_SCALE_MAX)
-            if neighbor.cee_aw < target_cee and neighbor.cee_aw < 6.5:
-                neighbor.cee_aw = min(neighbor.cee_aw * 1.05, BEHAVIORAL_SCALE_MAX)
-            if neighbor.ed_aw < target_ed and neighbor.ed_aw < 6.5:
-                neighbor.ed_aw = min(neighbor.ed_aw * 1.05, BEHAVIORAL_SCALE_MAX)
+            # Knowledge / awareness: conditional on (< target AND < CAP)
+            if neighbor.know < target_know and neighbor.know < BEHAVIORAL_CAP:
+                neighbor.know = min(neighbor.know * LEARN_AWARENESS_RATE_FAST, BEHAVIORAL_SCALE_MAX)
+            if neighbor.cee_aw < target_cee and neighbor.cee_aw < BEHAVIORAL_CAP:
+                neighbor.cee_aw = min(neighbor.cee_aw * LEARN_AWARENESS_RATE_FAST, BEHAVIORAL_SCALE_MAX)
+            if neighbor.ed_aw < target_ed and neighbor.ed_aw < BEHAVIORAL_CAP:
+                neighbor.ed_aw = min(neighbor.ed_aw * LEARN_AWARENESS_RATE_FAST, BEHAVIORAL_SCALE_MAX)
 
             neighbor.update_awareness()
 
-            # Action-specific norms: UNCONDITIONAL (just < 6.5), no target comparison
-            # per_nab and pbc: 5% rate; su_nor: 7% rate (matches NetLogo Fast/Slow blocks)
-            if neighbor.per_nab.get(action_type, 0) < 6.5:
+            # Action-specific norms: UNCONDITIONAL (just < CAP), no target comparison
+            if neighbor.per_nab.get(action_type, 0) < BEHAVIORAL_CAP:
                 neighbor.per_nab[action_type] = min(
-                    neighbor.per_nab.get(action_type, 0) * 1.05, BEHAVIORAL_SCALE_MAX
+                    neighbor.per_nab.get(action_type, 0) * LEARN_PER_NAB_PBC_RATE, BEHAVIORAL_SCALE_MAX
                 )
-            if neighbor.pbc.get(action_type, 0) < 6.5:
+            if neighbor.pbc.get(action_type, 0) < BEHAVIORAL_CAP:
                 neighbor.pbc[action_type] = min(
-                    neighbor.pbc.get(action_type, 0) * 1.05, BEHAVIORAL_SCALE_MAX
+                    neighbor.pbc.get(action_type, 0) * LEARN_PER_NAB_PBC_RATE, BEHAVIORAL_SCALE_MAX
                 )
-            if neighbor.su_nor.get(action_type, 0) < 6.5:
+            if neighbor.su_nor.get(action_type, 0) < BEHAVIORAL_CAP:
                 neighbor.su_nor[action_type] = min(
-                    neighbor.su_nor.get(action_type, 0) * 1.07, BEHAVIORAL_SCALE_MAX
+                    neighbor.su_nor.get(action_type, 0) * LEARN_SU_NOR_RATE, BEHAVIORAL_SCALE_MAX
                 )
 
     def recall_memory(self, household, initial_actions: Dict, 

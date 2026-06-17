@@ -1,5 +1,5 @@
-# BENCH model paper resutls considered - Table  1 - Assessing the macroeconomic impacts of individual behavioral changes on carbon emissions
-# Each entry runs a separate configuration in sequence.
+# BENCH model - carbon price sensitivity with/without cp awareness
+# Each entry runs a separate configuration. `runs` controls seed count per scenario.
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -7,13 +7,15 @@
   learning_type: Fast adaptation
   run_label: Baseline_NoCP
   carbon_price_awareness: True
-  
+  runs: 10
+
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
   policy: Carbon price pressure-10
   learning_type: Fast adaptation
   run_label: FDC10
   carbon_price_awareness: True
+  runs: 10
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -21,6 +23,7 @@
   learning_type: Fast adaptation
   run_label: FDC100
   carbon_price_awareness: True
+  runs: 10
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -28,6 +31,7 @@
   learning_type: Fast adaptation
   run_label: FDC10_unaware
   carbon_price_awareness: False
+  runs: 10
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -35,3 +39,4 @@
   learning_type: Fast adaptation
   run_label: FDC100_unaware
   carbon_price_awareness: False
+  runs: 10

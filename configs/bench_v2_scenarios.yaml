@@ -1,5 +1,5 @@
-# BENCH model paper resutls considered - Table  1 - Assessing the macroeconomic impacts of individual behavioral changes on carbon emissions
-# Each entry runs a separate configuration in sequence.
+# BENCH model paper results - Table 1
+# Each entry runs a separate configuration. `runs` controls seed count per scenario.
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -8,6 +8,7 @@
   run_label: Baseline
   carbon_price_awareness: True
   satisfaction_regret: True
+  runs: 10
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -16,6 +17,7 @@
   run_label: SD
   carbon_price_awareness: True
   satisfaction_regret: True
+  runs: 10
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -24,6 +26,7 @@
   run_label: FD
   carbon_price_awareness: True
   satisfaction_regret: True
+  runs: 10
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -32,6 +35,7 @@
   run_label: SDC
   carbon_price_awareness: True
   satisfaction_regret: True
+  runs: 10
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -40,3 +44,4 @@
   run_label: FDC
   carbon_price_awareness: True
   satisfaction_regret: True
+  runs: 10

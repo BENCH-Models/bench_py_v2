@@ -11,6 +11,7 @@ from utils.constants import (
     CONSERVATION_RATE, GUILT_HIGH, GUILT_LOW,
     BEHAVIORAL_SCALE_MAX
 )
+from utils.params import BEHAVIORAL_CAP, CPINFO_RATES, REGRET_PER_NAB_PBC_RATE, REGRET_SU_NOR_RATE
 
 
 class DecisionMaker:
@@ -71,62 +72,25 @@ class DecisionMaker:
         if policy == "Ref":
             return
         
-        # Handle different carbon price policies
-        if policy == "Carbon price pressure-10":
-            if household.know < 6.5:
-                household.know = min(household.know * 1.01, BEHAVIORAL_SCALE_MAX)
-            if household.cee_aw < 6.5:
-                household.cee_aw = min(household.cee_aw * 1.01, BEHAVIORAL_SCALE_MAX)
-            if household.ed_aw < 6.5:
-                household.ed_aw = min(household.ed_aw * 1.01, BEHAVIORAL_SCALE_MAX)
-            household.update_awareness()
-            
-        elif policy == "Carbon price pressure-25":
-            if household.know < 6.5:
-                household.know = min(household.know * 1.02, BEHAVIORAL_SCALE_MAX)
-            if household.cee_aw < 6.5:
-                household.cee_aw = min(household.cee_aw * 1.02, BEHAVIORAL_SCALE_MAX)
-            if household.ed_aw < 6.5:
-                household.ed_aw = min(household.ed_aw * 1.02, BEHAVIORAL_SCALE_MAX)
-            household.update_awareness()
-            
-            for action in ['investment', 'conservation', 'switching']:
-                if household.su_nor[action] < 6.5:
-                    household.su_nor[action] = min(household.su_nor[action] * 1.04, BEHAVIORAL_SCALE_MAX)
-                if household.pbc[action] < 6.5:
-                    household.pbc[action] = min(household.pbc[action] * 1.03, BEHAVIORAL_SCALE_MAX)
-                    
-        elif policy == "Carbon price pressure-50":
-            if household.know < 6.5:
-                household.know = min(household.know * 1.04, BEHAVIORAL_SCALE_MAX)
-            if household.cee_aw < 6.5:
-                household.cee_aw = min(household.cee_aw * 1.04, BEHAVIORAL_SCALE_MAX)
-            if household.ed_aw < 6.5:
-                household.ed_aw = min(household.ed_aw * 1.04, BEHAVIORAL_SCALE_MAX)
-            household.update_awareness()
-            
-            for action in ['investment', 'conservation', 'switching']:
-                if household.su_nor[action] < 6.5:
-                    household.su_nor[action] = min(household.su_nor[action] * 1.06, BEHAVIORAL_SCALE_MAX)
-                if household.pbc[action] < 6.5:
-                    household.pbc[action] = min(household.pbc[action] * 1.04, BEHAVIORAL_SCALE_MAX)
-                    
-        elif policy == "Carbon price pressure-100":
-            if household.know < 6.5:
-                household.know = min(household.know * 1.06, BEHAVIORAL_SCALE_MAX)
-            if household.cee_aw < 6.5:
-                household.cee_aw = min(household.cee_aw * 1.06, BEHAVIORAL_SCALE_MAX)
-            if household.ed_aw < 6.5:
-                household.ed_aw = min(household.ed_aw * 1.06, BEHAVIORAL_SCALE_MAX)
-            household.update_awareness()
-            
-            for action in ['investment', 'conservation', 'switching']:
-                if household.su_nor[action] < 6.5:
-                    household.su_nor[action] = min(household.su_nor[action] * 1.10, BEHAVIORAL_SCALE_MAX)
-                if household.pbc[action] < 6.5:
-                    household.pbc[action] = min(household.pbc[action] * 1.05, BEHAVIORAL_SCALE_MAX)
-        
-        # Note: "Carbon price pressure-2020" would go here if needed
+        rates = CPINFO_RATES.get(policy)
+        if rates is None:
+            return
+
+        aw_rate = rates["awareness"]
+        for attr in ("know", "cee_aw", "ed_aw"):
+            val = getattr(household, attr)
+            if val < BEHAVIORAL_CAP:
+                setattr(household, attr, min(val * aw_rate, BEHAVIORAL_SCALE_MAX))
+        household.update_awareness()
+
+        if rates["su_nor"] is not None:
+            su_rate  = rates["su_nor"]
+            pbc_rate = rates["pbc"]
+            for action in ('investment', 'conservation', 'switching'):
+                if household.su_nor[action] < BEHAVIORAL_CAP:
+                    household.su_nor[action] = min(household.su_nor[action] * su_rate, BEHAVIORAL_SCALE_MAX)
+                if household.pbc[action] < BEHAVIORAL_CAP:
+                    household.pbc[action] = min(household.pbc[action] * pbc_rate, BEHAVIORAL_SCALE_MAX)
 
     def calculate_satisfaction(self, household) -> str:
         """
@@ -229,15 +193,15 @@ class DecisionMaker:
             if learning_type == "Fast adaptation":
                 # Reduce personal norm for conservation
                 if household.per_nab.get('conservation', 0) >= 1:
-                    household.per_nab['conservation'] = max(0, household.per_nab['conservation'] * 0.95)
+                    household.per_nab['conservation'] = max(0, household.per_nab['conservation'] * REGRET_PER_NAB_PBC_RATE)
                 
                 # Reduce PBC for conservation
                 if household.pbc.get('conservation', 0) >= 1:
-                    household.pbc['conservation'] = max(0, household.pbc['conservation'] * 0.95)
+                    household.pbc['conservation'] = max(0, household.pbc['conservation'] * REGRET_PER_NAB_PBC_RATE)
                 
                 # Reduce social norm for conservation
                 if household.su_nor.get('conservation', 0) >= 1:
-                    household.su_nor['conservation'] = max(0, household.su_nor['conservation'] * 0.97)
+                    household.su_nor['conservation'] = max(0, household.su_nor['conservation'] * REGRET_SU_NOR_RATE)
             
             elif learning_type == "Slow adaptation":
                 # In Slow adaptation, regret spreads to neighbors
@@ -252,15 +216,15 @@ class DecisionMaker:
             if learning_type == "Fast adaptation":
                 # Reduce personal norm for switching
                 if household.per_nab.get('switching', 0) >= 1:
-                    household.per_nab['switching'] = max(0, household.per_nab['switching'] * 0.95)
+                    household.per_nab['switching'] = max(0, household.per_nab['switching'] * REGRET_PER_NAB_PBC_RATE)
                 
                 # Reduce PBC for switching
                 if household.pbc.get('switching', 0) >= 1:
-                    household.pbc['switching'] = max(0, household.pbc['switching'] * 0.95)
+                    household.pbc['switching'] = max(0, household.pbc['switching'] * REGRET_PER_NAB_PBC_RATE)
                 
                 # Reduce social norm for switching
                 if household.su_nor.get('switching', 0) >= 1:
-                    household.su_nor['switching'] = max(0, household.su_nor['switching'] * 0.97)
+                    household.su_nor['switching'] = max(0, household.su_nor['switching'] * REGRET_SU_NOR_RATE)
             
             elif learning_type == "Slow adaptation":
                 if not hasattr(household, 'regret_to_spread'):
@@ -272,15 +236,15 @@ class DecisionMaker:
             if learning_type == "Fast adaptation":
                 # Reduce personal norm for investment
                 if household.per_nab.get('investment', 0) >= 1:
-                    household.per_nab['investment'] = max(0, household.per_nab['investment'] * 0.95)
+                    household.per_nab['investment'] = max(0, household.per_nab['investment'] * REGRET_PER_NAB_PBC_RATE)
                 
                 # Reduce PBC for investment
                 if household.pbc.get('investment', 0) >= 1:
-                    household.pbc['investment'] = max(0, household.pbc['investment'] * 0.95)
+                    household.pbc['investment'] = max(0, household.pbc['investment'] * REGRET_PER_NAB_PBC_RATE)
                 
                 # Reduce social norm for investment
                 if household.su_nor.get('investment', 0) >= 1:
-                    household.su_nor['investment'] = max(0, household.su_nor['investment'] * 0.97)
+                    household.su_nor['investment'] = max(0, household.su_nor['investment'] * REGRET_SU_NOR_RATE)
             
             elif learning_type == "Slow adaptation":
                 if not hasattr(household, 'regret_to_spread'):

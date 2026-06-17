@@ -128,11 +128,14 @@ def main():
         )
         print(f"Batch output root: {batch_output_root}")
 
-    # Build the linear task parameter combination list
+    # Build the linear task parameter combination list.
+    # Upgrade 2+3: each scenario can declare its own `runs` count; falls back to
+    # the global NUMBER_SEED_RUNS constant when omitted.
     tasks = []
     for config in configs:
         config["debug"] = config.get("debug", args.debug)
-        for seed_idx in range(NUMBER_SEED_RUNS):
+        n_runs = int(config.get("runs", NUMBER_SEED_RUNS))
+        for seed_idx in range(n_runs):
             tasks.append((config, args.base_path, batch_output_root, seed_idx))
 
     print(f"\nInitializing joblib Parallel Pool using n_jobs={args.workers}...")
