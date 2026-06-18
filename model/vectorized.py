@@ -96,11 +96,14 @@ def update_motivation(pop: Population, case_study: str) -> None:
 # ---------------------------------------------------------------------------
 
 def consider_constraints(pop: Population) -> None:
-    """Compute delta for all agents Ã— actions from PBC values."""
+    """Compute delta for all agents × actions from PBC values."""
     pbc = pop.pbc  # (N, 3)
     d = np.full_like(pbc, _DELTA_DEFAULT)
     for thresh, val in _DELTA_STEPS:
         d[pbc >= thresh] = val
+    # NetLogo gates switching on responsibility; non-responsible agents get delta_SWI=0
+    # so utility_exp[SWI]=0 and they never switch (investment/conservation are ungated)
+    d[~pop.responsibility, SWI] = 0.0
     pop.delta[:] = d
 
 

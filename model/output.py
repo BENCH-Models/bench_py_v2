@@ -281,19 +281,22 @@ class ResultsExporter:
             model.policy, start_year, end_year
         ))
         
-        # Key trajectories
+        # Key trajectories — filenames kept short to stay within Windows MAX_PATH (260 chars)
         trajectories = [
-            'green_share_percent',
-            'action_1_count',
-            'action_2_count',
-            'action_3_count',
-            'total_emissions_avoided_kg_co2',
-            'total_energy_saved_kwh',
+            ('green_share_percent', None),
+            ('action_1_count', None),
+            ('action_2_count', None),
+            ('action_3_count', None),
+            ('total_emissions_avoided_kg_co2', 'trajectory_em_avoided_co2.csv'),
+            ('em_avoided_inv_kg_co2', 'trajectory_em_avoided_inv.csv'),
+            ('em_avoided_con_kg_co2', 'trajectory_em_avoided_con.csv'),
+            ('em_avoided_swi_kg_co2', 'trajectory_em_avoided_swi.csv'),
+            ('total_energy_saved_kwh', None),
         ]
-        
-        for variable in trajectories:
+
+        for variable, filename in trajectories:
             files.append(self.export_trajectory(
-                model.statistics, variable, start_year, end_year
+                model.statistics, variable, start_year, end_year, filename=filename
             ))
         if VERBOSE:
             print(f"\nâœ“ All results exported to: {self.output_dir}")

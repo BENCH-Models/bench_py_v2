@@ -7,7 +7,7 @@
   learning_type: Fast adaptation
   run_label: Baseline_NoCP
   carbon_price_awareness: True
-  runs: 10
+  runs: 64
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -15,7 +15,7 @@
   learning_type: Fast adaptation
   run_label: FDC10
   carbon_price_awareness: True
-  runs: 10
+  runs: 64
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -23,7 +23,7 @@
   learning_type: Fast adaptation
   run_label: FDC25
   carbon_price_awareness: True
-  runs: 10
+  runs: 64
 
 - case_study: Netherlands-Overijssel
   scenario: Ref_SSP2
@@ -31,4 +31,4 @@
   learning_type: Fast adaptation
   run_label: FDC50
   carbon_price_awareness: True
-  runs: 10
+  runs: 64

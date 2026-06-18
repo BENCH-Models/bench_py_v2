@@ -239,6 +239,9 @@ class StatisticsAggregator:
 
         em_avoided = pop.em_avoided.sum(axis=1)
         total_em_avoided = float(em_avoided.sum())
+        em_avoided_inv = float(pop.em_avoided[:, 0].sum())  # INV=0
+        em_avoided_con = float(pop.em_avoided[:, 1].sum())  # CON=1
+        em_avoided_swi = float(pop.em_avoided[:, 2].sum())  # SWI=2
 
         ef = np.where(flags == 0, EMISSIONS_FACTOR_GRAY,
              np.where(flags == 1, EMISSIONS_FACTOR_BROWN, EMISSIONS_FACTOR_GREEN))
@@ -272,6 +275,12 @@ class StatisticsAggregator:
             'total_energy_saved_kwh': total_energy_saved,
             'total_emissions_avoided_kg_co2': total_em_avoided,
             'emissions_avoided_per_capita': total_em_avoided / n,
+            'em_avoided_inv_kg_co2': em_avoided_inv,
+            'em_avoided_inv_per_capita': em_avoided_inv / n,
+            'em_avoided_con_kg_co2': em_avoided_con,
+            'em_avoided_con_per_capita': em_avoided_con / n,
+            'em_avoided_swi_kg_co2': em_avoided_swi,
+            'em_avoided_swi_per_capita': em_avoided_swi / n,
             'total_emissions_kg_co2': total_emissions,
             'total_emissions_tons_co2': total_emissions / 1000.0,
             'emissions_per_capita_kg_co2': total_emissions / n,

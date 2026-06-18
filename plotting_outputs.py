@@ -487,6 +487,68 @@ def plot_income_group_actions(output_root: str, configs: List[Dict],
     return output_path
 
 
+def plot_emissions_avoided_by_source(batch_data: List[Tuple[str, List[pd.DataFrame]]],
+                                      x_col: str, plots_dir: str) -> str:
+    """
+    Three-panel figure: CO2 emissions avoided per capita (tons) broken down by
+    action source — Investment, Conservation, Switching.  Each panel shows all
+    configurations with 95% CI shading, matching the style of the main
+    emissions-avoided trajectory plot.
+    """
+    source_cols = [
+        ('em_avoided_inv_per_capita', 'Investment (PV)'),
+        ('em_avoided_con_per_capita', 'Conservation'),
+        ('em_avoided_swi_per_capita', 'Switching'),
+    ]
+
+    supported = any(
+        col in df.columns
+        for _, dfs in batch_data
+        for df in dfs
+        for col, _ in source_cols
+    )
+    if not supported:
+        return ''
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharey=False)
+
+    for ax, (col, source_name) in zip(axes, source_cols):
+        for label, dfs in batch_data:
+            matrix, x_values = [], None
+            for df in dfs:
+                if x_col not in df.columns or col not in df.columns:
+                    continue
+                df_s = df.sort_values(by=x_col)
+                if x_values is None:
+                    x_values = df_s[x_col].values
+                matrix.append(df_s[col].values / 1000.0)  # kg → tons
+
+            if not matrix or x_values is None:
+                continue
+
+            arr = np.array(matrix)
+            mean = arr.mean(axis=0)
+            line, = ax.plot(x_values, mean, label=label, marker='o', linewidth=2, markersize=4)
+            if arr.shape[0] > 1:
+                se = arr.std(axis=0, ddof=1) / np.sqrt(arr.shape[0])
+                ax.fill_between(x_values, mean - 1.96 * se, mean + 1.96 * se,
+                                color=line.get_color(), alpha=0.15)
+
+        ax.set_title(source_name, fontsize=12, fontweight='bold')
+        ax.set_xlabel('Year', fontsize=10)
+        ax.set_ylabel('CO2 Avoided per Capita (tons)', fontsize=10)
+        ax.legend(fontsize=8, loc='upper left')
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+    fig.suptitle('CO2 Emissions Avoided per Capita by Action Source (95% CI)',
+                 fontsize=13, fontweight='bold', y=1.01)
+    plt.tight_layout()
+    output_path = os.path.join(plots_dir, 'batch_emissions_avoided_by_source.png')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    return output_path
+
+
 def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     from model.config_loader import load_config_file
     print(f"Loading batch configurations from: {config_file_path}")
@@ -550,6 +612,12 @@ def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     if aw_mot_path:
         saved_plots.append(aw_mot_path)
         print(f"✓ Created awareness/motivation plot: {aw_mot_path}")
+
+    # Emissions avoided decomposed by action source (3-panel)
+    em_source_path = plot_emissions_avoided_by_source(batch_data, 'year', plots_dir)
+    if em_source_path:
+        saved_plots.append(em_source_path)
+        print(f"✓ Created emissions-avoided-by-source plot: {em_source_path}")
 
     # Income-group action bar chart
     ig_path = plot_income_group_actions(output_root, configs, plots_dir)

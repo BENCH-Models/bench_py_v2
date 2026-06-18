@@ -1,4 +1,4 @@
-# BENCH model paper results - Table 1
+# BENCH model - scenarios without carbon price awareness
 # Each entry runs a separate configuration. `runs` controls seed count per scenario.
 
 - case_study: Netherlands-Overijssel
@@ -6,7 +6,7 @@
   policy: Ref
   learning_type: No learning
   run_label: Baseline
-  carbon_price_awareness: True
+  carbon_price_awareness: False
   satisfaction_regret: True
   runs: 64
 
@@ -15,7 +15,7 @@
   policy: Ref
   learning_type: Slow adaptation
   run_label: SD
-  carbon_price_awareness: True
+  carbon_price_awareness: False
   satisfaction_regret: True
   runs: 64
 
@@ -24,7 +24,7 @@
   policy: Ref
   learning_type: Fast adaptation
   run_label: FD
-  carbon_price_awareness: True
+  carbon_price_awareness: False
   satisfaction_regret: True
   runs: 64
 
@@ -33,7 +33,7 @@
   policy: Carbon price pressure-25
   learning_type: Slow adaptation
   run_label: SDC
-  carbon_price_awareness: True
+  carbon_price_awareness: False
   satisfaction_regret: True
   runs: 64
 
@@ -42,6 +42,6 @@
   policy: Carbon price pressure-25
   learning_type: Fast adaptation
   run_label: FDC
-  carbon_price_awareness: True
+  carbon_price_awareness: False
   satisfaction_regret: True
   runs: 64
