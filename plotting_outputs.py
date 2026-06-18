@@ -472,7 +472,7 @@ def plot_income_group_actions(output_root: str, configs: List[Dict],
         plt.close()
         return ''
 
-    ax.set_xticks(x + width * (len(configs) * len(action_cols) - 1) / 2)
+    ax.set_xticks(x + width * float(len(configs) * len(action_cols) - 1) / 2)
     ax.set_xticklabels([f"Group {g}" for g in range(1, 8)], fontsize=10)
     ax.set_title('Cumulative Actions by Income Group (mean across seeds)', fontsize=13, fontweight='bold')
     ax.set_xlabel('Income Group', fontsize=11)
@@ -483,6 +483,192 @@ def plot_income_group_actions(output_root: str, configs: List[Dict],
 
     output_path = os.path.join(plots_dir, 'batch_income_group_actions.png')
     plt.savefig(output_path, dpi=300)
+    plt.close()
+    return output_path
+
+
+def plot_awareness_by_income_group(output_root: str, configs: List[Dict],
+                                   plots_dir: str) -> str:
+    """
+    One subfigure per scenario.  Each panel shows avg_awareness over time for
+    income groups 1-7 (mean ± 95% CI across seeds), read from
+    actions_by_income_group.csv in each run folder.
+    """
+    all_subfolders = sorted([
+        f for f in glob.glob(os.path.join(output_root, "*")) if os.path.isdir(f)
+    ])
+
+    group_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+                    '#9467bd', '#8c564b', '#e377c2']
+
+    configs_with_data = []
+    for config in configs:
+        label = config.get('run_label', '')
+        if not label:
+            continue
+        matched = [f for f in all_subfolders
+                   if os.path.basename(f).endswith(f'_{label}')
+                   or f'_{label}_' in os.path.basename(f)]
+        dfs = []
+        for folder in matched:
+            p = os.path.join(folder, 'actions_by_income_group.csv')
+            if os.path.exists(p):
+                try:
+                    dfs.append(pd.read_csv(p))
+                except Exception:
+                    pass
+        if dfs:
+            configs_with_data.append((label, dfs))
+
+    if not configs_with_data:
+        return ''
+
+    n = len(configs_with_data)
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 5), sharey=True)
+    if n == 1:
+        axes = [axes]
+
+    for ax, (label, dfs) in zip(axes, configs_with_data):
+        for g, color in zip(range(1, 8), group_colors):
+            matrix, years = [], None
+            for df in dfs:
+                grp = df[df['income_group'] == g].sort_values('year')
+                if grp.empty or 'avg_awareness' not in grp.columns:
+                    continue
+                if years is None:
+                    years = grp['year'].values
+                matrix.append(grp['avg_awareness'].values)
+
+            if not matrix or years is None:
+                continue
+
+            arr = np.array(matrix)
+            mean = arr.mean(axis=0)
+            ax.plot(years, mean, label=f'Group {g}', color=color, linewidth=2)
+            if arr.shape[0] > 1:
+                se = arr.std(axis=0, ddof=1) / np.sqrt(arr.shape[0])
+                ax.fill_between(years, mean - 1.96 * se, mean + 1.96 * se,
+                                color=color, alpha=0.12)
+
+        ax.set_title(label, fontsize=11, fontweight='bold')
+        ax.set_xlabel('Year', fontsize=9)
+        ax.set_ylabel('Avg Awareness', fontsize=9)
+        ax.legend(fontsize=7, loc='upper left', ncol=2)
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+    fig.suptitle('Awareness by Income Group per Scenario (95% CI)',
+                 fontsize=13, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    output_path = os.path.join(plots_dir, 'batch_awareness_by_income_group.png')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    return output_path
+
+
+def plot_cumulative_actions_per_scenario(batch_data: List[Tuple[str, List[pd.DataFrame]]],
+                                         x_col: str, plots_dir: str) -> str:
+    """
+    One subfigure per scenario.  Each panel shows cumulative action counts for
+    Investment, Conservation and Switching (mean ± 95% CI across seeds).
+    Cumsum is applied per seed before averaging so uncertainty is preserved.
+    """
+    if not batch_data:
+        return ''
+
+    action_cols  = ['action_1_count', 'action_2_count', 'action_3_count']
+    action_names = ['Investment (PV)', 'Conservation', 'Switching']
+    action_colors = ['#2E86AB', '#A23B72', '#F18F01']
+
+    n = len(batch_data)
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 5), sharey=False)
+    if n == 1:
+        axes = [axes]
+
+    for ax, (label, dfs) in zip(axes, batch_data):
+        for col, name, color in zip(action_cols, action_names, action_colors):
+            matrix, x_values = [], None
+            for df in dfs:
+                if x_col not in df.columns or col not in df.columns:
+                    continue
+                df_s = df.sort_values(by=x_col)
+                if x_values is None:
+                    x_values = df_s[x_col].values
+                matrix.append(df_s[col].cumsum().values)
+
+            if not matrix or x_values is None:
+                continue
+
+            arr = np.array(matrix)
+            mean = arr.mean(axis=0)
+            ax.plot(x_values, mean, label=name, color=color, linewidth=2, marker='o', markersize=3)
+            if arr.shape[0] > 1:
+                se = arr.std(axis=0, ddof=1) / np.sqrt(arr.shape[0])
+                ax.fill_between(x_values, mean - 1.96 * se, mean + 1.96 * se,
+                                color=color, alpha=0.15)
+
+        ax.set_title(label, fontsize=11, fontweight='bold')
+        ax.set_xlabel('Year', fontsize=9)
+        ax.set_ylabel('Cumulative Households', fontsize=9)
+        ax.legend(fontsize=8, loc='upper left')
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+    fig.suptitle('Cumulative Actions by Type per Scenario (95% CI)',
+                 fontsize=13, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    output_path = os.path.join(plots_dir, 'batch_cumulative_actions_per_scenario.png')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    return output_path
+
+
+def plot_total_emissions_per_scenario(batch_data: List[Tuple[str, List[pd.DataFrame]]],
+                                      x_col: str, plots_dir: str) -> str:
+    """
+    One subfigure per scenario showing total CO2 emissions (tons) over time,
+    mean ± 95% CI across seeds.
+    """
+    col = 'total_emissions_tons_co2'
+    supported = any(col in df.columns for _, dfs in batch_data for df in dfs)
+    if not supported:
+        return ''
+
+    n = len(batch_data)
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 5), sharey=False)
+    if n == 1:
+        axes = [axes]
+
+    for ax, (label, dfs) in zip(axes, batch_data):
+        matrix, x_values = [], None
+        for df in dfs:
+            if x_col not in df.columns or col not in df.columns:
+                continue
+            df_s = df.sort_values(by=x_col)
+            if x_values is None:
+                x_values = df_s[x_col].values
+            matrix.append(df_s[col].values)
+
+        if not matrix or x_values is None:
+            ax.set_visible(False)
+            continue
+
+        arr = np.array(matrix)
+        mean = arr.mean(axis=0)
+        ax.plot(x_values, mean, color='#C0392B', linewidth=2, marker='o', markersize=3)
+        if arr.shape[0] > 1:
+            se = arr.std(axis=0, ddof=1) / np.sqrt(arr.shape[0])
+            ax.fill_between(x_values, mean - 1.96 * se, mean + 1.96 * se,
+                            color='#C0392B', alpha=0.15)
+
+        ax.set_title(label, fontsize=11, fontweight='bold')
+        ax.set_xlabel('Year', fontsize=9)
+        ax.set_ylabel('Total CO2 Emissions (tons)', fontsize=9)
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+    fig.suptitle('Total CO2 Emissions per Scenario (95% CI)',
+                 fontsize=13, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    output_path = os.path.join(plots_dir, 'batch_total_emissions_per_scenario.png')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     return output_path
 
@@ -618,6 +804,24 @@ def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     if em_source_path:
         saved_plots.append(em_source_path)
         print(f"✓ Created emissions-avoided-by-source plot: {em_source_path}")
+
+    # Awareness by income group per scenario
+    aw_ig_path = plot_awareness_by_income_group(output_root, configs, plots_dir)
+    if aw_ig_path:
+        saved_plots.append(aw_ig_path)
+        print(f"✓ Created awareness-by-income-group plot: {aw_ig_path}")
+
+    # Cumulative actions per scenario (one panel per scenario)
+    cum_act_path = plot_cumulative_actions_per_scenario(batch_data, 'year', plots_dir)
+    if cum_act_path:
+        saved_plots.append(cum_act_path)
+        print(f"✓ Created cumulative actions per scenario plot: {cum_act_path}")
+
+    # Total emissions per scenario (one panel per scenario)
+    tot_em_path = plot_total_emissions_per_scenario(batch_data, 'year', plots_dir)
+    if tot_em_path:
+        saved_plots.append(tot_em_path)
+        print(f"✓ Created total emissions per scenario plot: {tot_em_path}")
 
     # Income-group action bar chart
     ig_path = plot_income_group_actions(output_root, configs, plots_dir)
