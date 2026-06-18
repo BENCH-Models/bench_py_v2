@@ -334,7 +334,7 @@ def apply_regret(pop: Population, learning_type: str) -> None:
 
     r  = REGRET_PER_NAB_PBC_RATE
     sr = REGRET_SU_NOR_RATE
-    for a, code in [(INV, 2), (CON, 4), (SWI, 6)]:
+    for a, code in [(CON, 4), (SWI, 6)]:
         mask = pop.satisfaction == code
         if not mask.any():
             continue

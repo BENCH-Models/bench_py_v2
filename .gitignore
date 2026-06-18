@@ -8,6 +8,7 @@ wheels/
 output/
 netlogo/
 
+
 # Virtual environments
 .venv
 
@@ -43,3 +44,6 @@ Thumbs.db
 
 # === Netlogo genertated===
 debug.csv
+
+# === Claude genertated===
+.claude

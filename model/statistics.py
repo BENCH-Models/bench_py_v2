@@ -251,6 +251,15 @@ class StatisticsAggregator:
         high_guilt    = int(guilt.sum())
         avg_motivation = float((pop.h_motiv.sum(axis=1) / 3.0).mean())
 
+        # Awareness bin counts matching NetLogo draw_awareness (7 pens, scale 0-7)
+        aware_bin_1 = int((h_aware <= 1).sum())
+        aware_bin_2 = int(((h_aware > 1) & (h_aware <= 2)).sum())
+        aware_bin_3 = int(((h_aware > 2) & (h_aware <= 3)).sum())
+        aware_bin_4 = int(((h_aware > 3) & (h_aware <= 4)).sum())
+        aware_bin_5 = int(((h_aware > 4) & (h_aware <= 5)).sum())
+        aware_bin_6 = int(((h_aware > 5) & (h_aware <= 6)).sum())
+        aware_bin_7 = int((h_aware > 6).sum())
+
         return {
             'year': year, 'n_households': n,
             'consumption_grey':  total_grey,
@@ -290,6 +299,13 @@ class StatisticsAggregator:
             'high_guilt_count': high_guilt,
             'high_guilt_percent': high_guilt / n * 100,
             'avg_motivation': avg_motivation,
+            'aware_bin_1': aware_bin_1,
+            'aware_bin_2': aware_bin_2,
+            'aware_bin_3': aware_bin_3,
+            'aware_bin_4': aware_bin_4,
+            'aware_bin_5': aware_bin_5,
+            'aware_bin_6': aware_bin_6,
+            'aware_bin_7': aware_bin_7,
         }
 
     def aggregate_by_income_group_pop(self, pop, year: int) -> Dict[int, Dict]:

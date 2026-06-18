@@ -735,6 +735,69 @@ def plot_emissions_avoided_by_source(batch_data: List[Tuple[str, List[pd.DataFra
     return output_path
 
 
+def plot_awareness_bins(batch_data: List[Tuple[str, List[pd.DataFrame]]],
+                        x_col: str, plots_dir: str) -> str:
+    """
+    One subfigure per scenario. Each panel shows the count of households in each
+    of 7 awareness bins ([0-1], (1-2], ..., (6-7]) over time, matching the NetLogo
+    draw_awareness plot (7 pens). Mean ± 95% CI across seeds.
+    """
+    if not batch_data:
+        return ''
+
+    bin_cols  = [f'aware_bin_{i}' for i in range(1, 8)]
+    bin_labels = ['[0–1]', '(1–2]', '(2–3]', '(3–4]', '(4–5]', '(5–6]', '(6–7]']
+    bin_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+                  '#9467bd', '#8c564b', '#e377c2']
+
+    # Drop any config whose CSVs lack the bin columns (old runs pre-dating this stat)
+    valid = [(label, dfs) for label, dfs in batch_data
+             if dfs and bin_cols[0] in dfs[0].columns]
+    if not valid:
+        return ''
+
+    n = len(valid)
+    fig, axes = plt.subplots(1, n, figsize=(4 * n, 5), sharey=False)
+    if n == 1:
+        axes = [axes]
+
+    for ax, (label, dfs) in zip(axes, valid):
+        for col, bin_label, color in zip(bin_cols, bin_labels, bin_colors):
+            matrix, x_values = [], None
+            for df in dfs:
+                df_s = df.sort_values(x_col)
+                if col not in df_s.columns:
+                    continue
+                if x_values is None:
+                    x_values = df_s[x_col].values
+                matrix.append(df_s[col].values)
+
+            if not matrix or x_values is None:
+                continue
+
+            arr = np.array(matrix)
+            mean = arr.mean(axis=0)
+            ax.plot(x_values, mean, label=bin_label, color=color, linewidth=2)
+            if arr.shape[0] > 1:
+                se = arr.std(axis=0, ddof=1) / np.sqrt(arr.shape[0])
+                ax.fill_between(x_values, mean - 1.96 * se, mean + 1.96 * se,
+                                color=color, alpha=0.12)
+
+        ax.set_title(label, fontsize=11, fontweight='bold')
+        ax.set_xlabel('Year', fontsize=9)
+        ax.set_ylabel('Number of Households', fontsize=9)
+        ax.legend(fontsize=7, loc='upper left', ncol=2, title='Awareness bin')
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+    fig.suptitle('Awareness Distribution over Time per Scenario (95% CI)',
+                 fontsize=13, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    output_path = os.path.join(plots_dir, 'batch_awareness_bins.png')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    return output_path
+
+
 def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     from model.config_loader import load_config_file
     print(f"Loading batch configurations from: {config_file_path}")
@@ -810,6 +873,12 @@ def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     if aw_ig_path:
         saved_plots.append(aw_ig_path)
         print(f"✓ Created awareness-by-income-group plot: {aw_ig_path}")
+
+    # Awareness bin distribution over time (7 lines matching NetLogo draw_awareness)
+    aw_bins_path = plot_awareness_bins(batch_data, 'year', plots_dir)
+    if aw_bins_path:
+        saved_plots.append(aw_bins_path)
+        print(f"✓ Created awareness bins plot: {aw_bins_path}")
 
     # Cumulative actions per scenario (one panel per scenario)
     cum_act_path = plot_cumulative_actions_per_scenario(batch_data, 'year', plots_dir)
