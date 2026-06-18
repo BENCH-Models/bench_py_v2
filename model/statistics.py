@@ -1,4 +1,4 @@
-"""
+﻿"""
 Statistics aggregation for BENCH model outputs.
 Upgrade 4: key population-level sums replaced with numpy array operations.
 """
@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
-from utils.constants import (
+from model.parameters import (
     FLAG_NAMES,
     DWELLING_LABEL_NAMES,
     EMISSIONS_FACTOR_GRAY,
@@ -141,7 +141,7 @@ class StatisticsAggregator:
         h_invest   = np.array([hh.h_invest                    for hh in households], dtype=np.float64)
         em_avoided = np.array([sum(hh.em_avoided.values())    for hh in households], dtype=np.float64)
         h_aware    = np.array([hh.h_aware                     for hh in households], dtype=np.float64)
-        income     = self._ig_income  # static — doesn't change within a run
+        income     = self._ig_income  # static â€” doesn't change within a run
 
         stats_by_group: Dict[int, Dict] = {}
         for g in range(1, 8):
@@ -190,6 +190,127 @@ class StatisticsAggregator:
                 'total_energy_saved': float(h_conserv[mask].sum()),
             }
         return stats_by_label
+
+    # ------------------------------------------------------------------
+    # Population-array-aware variants (no list comprehensions)
+    # ------------------------------------------------------------------
+
+    def aggregate_population_stats_pop(self, pop, year: int) -> Dict:
+        """
+        Aggregate population-level statistics directly from Population arrays.
+        No per-agent Python loops â€” reads arrays once and delegates to numpy.
+        """
+        from model.population import HH_SELFPRODUCER, HH_EFFICIENT
+        n = pop.N
+        if n == 0:
+            return {'year': year, 'n_households': 0}
+
+        flags   = pop.flag
+        h_q     = pop.h_q
+        act1    = pop.act1
+        act2    = pop.act2
+        act3    = pop.act3
+        h_aware = pop.h_aware
+        guilt   = pop.guilt
+
+        total_grey  = float(h_q[flags == 0].sum())
+        total_brown = float(h_q[flags == 1].sum())
+        total_green = float(h_q[flags == 2].sum())
+        total_con   = total_grey + total_brown + total_green
+        green_share = (total_green / total_con * 100) if total_con > 0 else 0.0
+
+        n1 = int(act1.sum())
+        n2 = int(act2.sum())
+        n3 = int(act3.sum())
+        n_total = int((act1 | act2 | act3).sum())
+
+        # Sub-type counts: annual flag & permanent flag identifies who acted this year
+        inv_grey       = int((act1 & pop.act12).sum())   # grey PV invest
+        inv_brown_grn  = int((act1 & pop.act11).sum())   # brown/green PV invest
+        con_grey       = int((act2 & pop.act40).sum())   # grey conservation
+        con_brown_grn  = int((act2 & pop.act21).sum())   # brown/green conservation
+        swi_to_brown   = int((act3 & pop.act32).sum())   # grey → brown switch
+        swi_to_green   = int((act3 & pop.act31).sum())   # brown → green switch
+
+        total_energy_saved    = float((pop.h_conserv + pop.h_invest_save).sum())
+        total_investment      = float(pop.h_invest.sum())
+        total_conserv_savings = float(pop.h_conserv_p.sum())
+        total_switch_benefit  = float(pop.h_switch.sum())
+
+        em_avoided = pop.em_avoided.sum(axis=1)
+        total_em_avoided = float(em_avoided.sum())
+
+        ef = np.where(flags == 0, EMISSIONS_FACTOR_GRAY,
+             np.where(flags == 1, EMISSIONS_FACTOR_BROWN, EMISSIONS_FACTOR_GREEN))
+        total_emissions = float((h_q * ef).sum())
+
+        avg_awareness = float(h_aware.mean())
+        high_guilt    = int(guilt.sum())
+        avg_motivation = float((pop.h_motiv.sum(axis=1) / 3.0).mean())
+
+        return {
+            'year': year, 'n_households': n,
+            'consumption_grey':  total_grey,
+            'consumption_brown': total_brown,
+            'consumption_green': total_green,
+            'consumption_total': total_con,
+            'green_share_percent': green_share,
+            'action_1_count': n1, 'action_2_count': n2, 'action_3_count': n3,
+            'action_total_count': n_total,
+            'action_1_percent': n1 / n * 100,
+            'action_2_percent': n2 / n * 100,
+            'action_3_percent': n3 / n * 100,
+            'inv_grey_count': inv_grey,
+            'inv_brown_green_count': inv_brown_grn,
+            'con_grey_count': con_grey,
+            'con_brown_green_count': con_brown_grn,
+            'swi_to_brown_count': swi_to_brown,
+            'swi_to_green_count': swi_to_green,
+            'total_investment': total_investment,
+            'total_conservation_savings_money': total_conserv_savings,
+            'total_switching_benefit': total_switch_benefit,
+            'total_energy_saved_kwh': total_energy_saved,
+            'total_emissions_avoided_kg_co2': total_em_avoided,
+            'emissions_avoided_per_capita': total_em_avoided / n,
+            'total_emissions_kg_co2': total_emissions,
+            'total_emissions_tons_co2': total_emissions / 1000.0,
+            'emissions_per_capita_kg_co2': total_emissions / n,
+            'emissions_per_capita_tons': total_emissions / n / 1000.0,
+            'co2_emitted_tons_per_capita': total_emissions / n / 1000.0,
+            'avg_awareness': avg_awareness,
+            'high_guilt_count': high_guilt,
+            'high_guilt_percent': high_guilt / n * 100,
+            'avg_motivation': avg_motivation,
+        }
+
+    def aggregate_by_income_group_pop(self, pop, year: int) -> Dict[int, Dict]:
+        """Aggregate statistics by income group directly from Population arrays."""
+        # Build static cache on first call
+        if self._ig_groups is None:
+            self._ig_groups = pop.income_group.copy()
+            self._ig_income  = pop.h_income.copy()
+            self._ig_masks   = {g: pop.income_group == g for g in range(1, 8)}
+
+        stats: Dict[int, Dict] = {}
+        for g in range(1, 8):
+            mask = self._ig_masks[g]
+            cnt  = int(mask.sum())
+            if cnt == 0:
+                stats[g] = {}
+                continue
+            em = pop.em_avoided.sum(axis=1)
+            stats[g] = {
+                'count':           cnt,
+                'avg_income':      float(pop.h_income[mask].mean()),
+                'avg_consumption': float(pop.h_q[mask].mean()),
+                'action_1_count':  int(pop.act1[mask].sum()),
+                'action_2_count':  int(pop.act2[mask].sum()),
+                'action_3_count':  int(pop.act3[mask].sum()),
+                'total_investment': float(pop.h_invest[mask].sum()),
+                'total_emissions_avoided': float(em[mask].sum()),
+                'avg_awareness':   float(pop.h_aware[mask].mean()),
+            }
+        return stats
 
     def store_annual_stats(self, year: int, stats: Dict) -> None:
         self.annual_stats[year] = stats

@@ -1,4 +1,4 @@
-"""
+﻿"""
 BENCH Model - Main Entry Point (Parallelized with Joblib)
 Behavioral Energy Consumption Household Model in Pure Python
 
@@ -20,8 +20,8 @@ sys.path.insert(0, str(project_root))
 
 from model.bench_model import BENCHModel
 from plotting_outputs import plot_batch_for_config
-from utils.config_loader import load_config_file, normalize_run_config
-from utils.constants import DEFAULT_LEARNING_TYPE, OUTPUT_DIR, NUMBER_SEED_RUNS, VERBOSE
+from model.config_loader import load_config_file, normalize_run_config
+from model.parameters import DEFAULT_LEARNING_TYPE, OUTPUT_DIR, NUMBER_SEED_RUNS, VERBOSE
 
 
 def build_parser():
@@ -85,7 +85,7 @@ def run_single_job(config: dict, base_path: str, batch_output_root: str, seed: i
         # Run silently to avoid scrambled multi-core print overlapping
         success = model.run()
         if not success:
-            print(f"✗ Run failed for config '{base_label}' on seed {seed}")
+            print(f"âœ— Run failed for config '{base_label}' on seed {seed}")
             return False
 
         # Get summary safely using the implementation present in BENCHModel or its components
@@ -93,7 +93,7 @@ def run_single_job(config: dict, base_path: str, batch_output_root: str, seed: i
         if VERBOSE and summary:
             print(f"\n=== RESULTS: {base_label} (Seed: {seed}) ===")
             print("-" * 60)
-            print(f"Total Investment: €{summary.get('total_investment', 0):,.2f}")
+            print(f"Total Investment: â‚¬{summary.get('total_investment', 0):,.2f}")
             print(f"Total Energy Saved: {summary.get('total_energy_saved', 0):,.0f} kWh")
             print(f"Total Emissions Avoided: {summary.get('total_emissions_avoided', 0):,.0f} kg CO2")
             print(f"Total Actions: {summary.get('actions_cumulative', 0):,.0f}")
@@ -102,7 +102,7 @@ def run_single_job(config: dict, base_path: str, batch_output_root: str, seed: i
         return True
 
     except Exception as e:
-        print(f"✗ Exception occurred on Configuration '{base_label}' | Seed {seed}: {e}")
+        print(f"âœ— Exception occurred on Configuration '{base_label}' | Seed {seed}: {e}")
         return False
 
 

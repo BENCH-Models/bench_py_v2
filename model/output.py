@@ -1,4 +1,4 @@
-"""
+﻿"""
 Output and results export functionality
 """
 
@@ -7,7 +7,7 @@ import csv
 import json
 import pandas as pd
 from typing import Dict, List
-from utils.constants import OUTPUT_DIR, VERBOSE
+from model.parameters import OUTPUT_DIR, VERBOSE
 
 try:
     import yaml
@@ -113,7 +113,7 @@ class ResultsExporter:
         
         df = pd.DataFrame(rows)
         df.to_csv(output_path, index=False)
-        #print(f"✓ Exported household actions: {output_path}")
+        #print(f"âœ“ Exported household actions: {output_path}")
         
         return output_path
     
@@ -175,10 +175,10 @@ class ResultsExporter:
             
             f.write("CUMULATIVE RESULTS\n")
             f.write("-" * 60 + "\n")
-            f.write(f"Total Investments: €{cumulative['total_investment']:,.2f}\n")
+            f.write(f"Total Investments: â‚¬{cumulative['total_investment']:,.2f}\n")
             f.write(f"Total Energy Saved: {cumulative['total_energy_saved']:,.0f} kWh\n")
             f.write(f"Total Emissions Avoided: {cumulative['total_emissions_avoided']:,.0f} kg CO2\n")
-            f.write(f"Total Conservation Savings: €{cumulative['total_conservation_savings']:,.2f}\n")
+            f.write(f"Total Conservation Savings: â‚¬{cumulative['total_conservation_savings']:,.2f}\n")
             f.write(f"Total Actions Taken: {cumulative['actions_cumulative']:,.0f}\n\n")
             
             # Final year metrics
@@ -192,7 +192,7 @@ class ResultsExporter:
             
             f.write("=" * 60 + "\n")
         
-        #print(f"✓ Exported summary report: {output_path}")
+        #print(f"âœ“ Exported summary report: {output_path}")
         return output_path
     
     def export_run_config(self, config: Dict,
@@ -203,14 +203,14 @@ class ResultsExporter:
 
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
-        #print(f"✓ Exported run configuration: {output_path}")
+        #print(f"âœ“ Exported run configuration: {output_path}")
         output_paths.append(output_path)
 
         if yaml is not None:
             yaml_path = os.path.join(self.output_dir, 'run_config.yaml')
             with open(yaml_path, 'w', encoding='utf-8') as f:
                 yaml.safe_dump(config, f, sort_keys=False)
-            #print(f"✓ Exported run configuration: {yaml_path}")
+            #print(f"âœ“ Exported run configuration: {yaml_path}")
             output_paths.append(yaml_path)
 
         return output_paths
@@ -296,5 +296,5 @@ class ResultsExporter:
                 model.statistics, variable, start_year, end_year
             ))
         if VERBOSE:
-            print(f"\n✓ All results exported to: {self.output_dir}")
+            print(f"\nâœ“ All results exported to: {self.output_dir}")
         return files

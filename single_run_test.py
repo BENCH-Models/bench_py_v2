@@ -1,4 +1,4 @@
-"""
+﻿"""
 BENCH Model - Single Test Run Script
 Runs the model once with minimal configuration for testing purposes
 """
@@ -11,7 +11,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from model.bench_model import BENCHModel
-from utils.constants import DEFAULT_LEARNING_TYPE
+from model.parameters import DEFAULT_LEARNING_TYPE
 
 
 def run_single_test():
@@ -65,7 +65,7 @@ def run_single_test():
         success = model.run()
         
         if not success:
-            print("\n✗ Simulation failed!")
+            print("\nâœ— Simulation failed!")
             return False
         
         # Get and display results summary
@@ -75,7 +75,7 @@ def run_single_test():
         
         summary = model.get_summary()
         if summary:
-            print(f"\nTotal Investment: €{summary.get('total_investment', 0):,.2f}")
+            print(f"\nTotal Investment: â‚¬{summary.get('total_investment', 0):,.2f}")
             print(f"Total Energy Saved: {summary.get('total_energy_saved', 0):,.0f} kWh")
             print(f"Total Emissions Avoided: {summary.get('total_emissions_avoided', 0):,.0f} kg CO2")
             print(f"Total Actions: {summary.get('actions_cumulative', 0):,.0f}")
@@ -90,13 +90,13 @@ def run_single_test():
         print("\nExporting results...")
         model.export_results()
         
-        print("\n✓ Simulation completed successfully!")
+        print("\nâœ“ Simulation completed successfully!")
 
         
         return True
         
     except Exception as e:
-        print(f"\n✗ Error during simulation: {e}")
+        print(f"\nâœ— Error during simulation: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("TEST SUMMARY")
     print("=" * 80)
-    print(f"Full Test: {'✓ PASSED' if success else '✗ FAILED'}")
+    print(f"Full Test: {'âœ“ PASSED' if success else 'âœ— FAILED'}")
 
     
     sys.exit(0 if success else 1)

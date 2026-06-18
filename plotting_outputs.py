@@ -139,7 +139,7 @@ def plot_batch_comparison(batch_data: List[Tuple[str, List[pd.DataFrame]]],
         mean_line = np.mean(data_matrix, axis=0)
         line, = plt.plot(x_values, mean_line, label=f"{label} (N={n_samples})", marker='o', linewidth=2, markersize=4)
 
-        print(mean_line)
+        #print(mean_line)
         
         color = line.get_color()
         plotted = True
@@ -178,81 +178,148 @@ def plot_batch_comparison(batch_data: List[Tuple[str, List[pd.DataFrame]]],
     return output_path
 
 
-def plot_combined_actions(batch_data: List[Tuple[str, List[pd.DataFrame]]], 
+def plot_combined_actions(batch_data: List[Tuple[str, List[pd.DataFrame]]],
                           x_col: str, plots_dir: str) -> str:
     """
-    Plots all three action types (investment, conservation, switching) on the same graph.
-    Uses different colors and line styles for each action type.
+    3-row subplot grid: one row per action type, all scenarios as coloured lines.
+    This keeps the legend small (scenario names only) and makes cross-scenario
+    comparison easy for each action type independently.
     """
-    plt.figure(figsize=(12, 7))
-    
-    # Define action types with their display names and colors
     action_configs = [
-        ('action_1_count', 'Investment (PV Installation)', '#2E86AB', 'o'),
-        ('action_2_count', 'Conservation (Efficiency)', '#A23B72', 's'),
-        ('action_3_count', 'Switching (Renewable)', '#F18F01', '^')
+        ('action_1_count', 'Investment (PV Installation)'),
+        ('action_2_count', 'Conservation (Efficiency)'),
+        ('action_3_count', 'Switching (Renewable)'),
     ]
-    
-    plotted_actions = []
-    
-    for label, dfs in batch_data:
-        for action_col, action_name, color, marker in action_configs:
+
+    # One colour per scenario/config
+    scenario_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+    fig, axes = plt.subplots(3, 1, figsize=(11, 12), sharex=True)
+    any_plotted = False
+
+    for ax, (action_col, action_title) in zip(axes, action_configs):
+        ax.set_title(action_title, fontsize=12, fontweight='bold')
+        ax.set_ylabel('Households taking action', fontsize=10)
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+        for (label, dfs), color in zip(batch_data, scenario_colors):
             combined_matrix = []
             x_values = None
-            
+
             for df in dfs:
                 if x_col in df.columns and action_col in df.columns:
                     df_sorted = df.sort_values(by=x_col)
-                    x_values = df_sorted[x_col].values
-                    y_values = df_sorted[action_col].values
-                    combined_matrix.append(y_values)
-            
+                    if x_values is None:
+                        x_values = df_sorted[x_col].values
+                    combined_matrix.append(df_sorted[action_col].values)
+
             if not combined_matrix or x_values is None:
                 continue
-                
+
             data_matrix = np.array(combined_matrix)
             n_samples = data_matrix.shape[0]
             mean_line = np.mean(data_matrix, axis=0)
-            
-            # Use different line styles for different configurations
-            line_style = '-' if label == batch_data[0][0] else '--'
-            
-            line, = plt.plot(x_values, mean_line, 
-                           label=f"{label} - {action_name}", 
-                           color=color, 
-                           marker=marker, 
-                           linestyle=line_style,
-                           linewidth=2, 
-                           markersize=5,
-                           markevery=2)  # Show marker every 2nd point for clarity
-            
-            plotted_actions.append(True)
-            
-            # Add confidence intervals
+
+            ax.plot(x_values, mean_line, label=f"{label} (N={n_samples})",
+                    color=color, linewidth=2, marker='o', markersize=4)
+
             if n_samples > 1:
                 std_dev = np.std(data_matrix, axis=0, ddof=1)
-                standard_error = std_dev / np.sqrt(n_samples)
-                margin_error = 1.96 * standard_error
-                
-                lower_bound = mean_line - margin_error
-                upper_bound = mean_line + margin_error
-                
-                plt.fill_between(x_values, lower_bound, upper_bound, 
-                                color=color, alpha=0.1)
-    
-    if not plotted_actions:
+                se = std_dev / np.sqrt(n_samples)
+                ax.fill_between(x_values, mean_line - 1.96 * se,
+                                mean_line + 1.96 * se, color=color, alpha=0.15)
+
+            any_plotted = True
+
+        ax.legend(loc='upper left', frameon=True, facecolor='white',
+                  edgecolor='#e0e0e0', fontsize=9)
+
+    if not any_plotted:
         plt.close()
         return ''
-    
-    plt.title('Household Actions Over Time (95% CI)', fontsize=14, fontweight='bold', pad=15)
-    plt.xlabel('Year', fontsize=12)
-    plt.ylabel('Number of Households Taking Action', fontsize=12)
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.legend(loc='best', frameon=True, facecolor='white', edgecolor='#e0e0e0', fontsize=9)
+
+    axes[-1].set_xlabel('Year', fontsize=11)
+    fig.suptitle('Household Actions Over Time (mean ± 95% CI)',
+                 fontsize=14, fontweight='bold', y=1.01)
     plt.tight_layout()
-    
+
     output_path = os.path.join(plots_dir, 'batch_comparison_all_actions.png')
-    plt.savefig(output_path, dpi=300)
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    return output_path
+
+
+def plot_subaction_counts(batch_data: List[Tuple[str, List[pd.DataFrame]]],
+                          x_col: str, plots_dir: str) -> str:
+    """
+    3-row × 2-col subplot grid for the 6 action sub-types.
+    Row = action type (Investment / Conservation / Switching).
+    Col = agent sub-type (Grey | Brown+Green, or To-Brown | To-Green).
+    All scenarios plotted as coloured lines with 95% CI shading on each panel.
+    """
+    subaction_configs = [
+        # (column_name, panel_title, row, col)
+        ('inv_grey_count',        'Investment — Grey agents (act12)',          0, 0),
+        ('inv_brown_green_count', 'Investment — Brown/Green agents (act11)',   0, 1),
+        ('con_grey_count',        'Conservation — Grey agents (act40)',        1, 0),
+        ('con_brown_green_count', 'Conservation — Brown/Green agents (act21)', 1, 1),
+        ('swi_to_brown_count',    'Switching — Grey → Brown (act32)',          2, 0),
+        ('swi_to_green_count',    'Switching — Brown → Green (act31)',         2, 1),
+    ]
+
+    scenario_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    fig, axes = plt.subplots(3, 2, figsize=(13, 12), sharex=True)
+    any_plotted = False
+
+    for col_name, panel_title, row, col in subaction_configs:
+        ax = axes[row, col]
+        ax.set_title(panel_title, fontsize=11, fontweight='bold')
+        ax.set_ylabel('Households', fontsize=9)
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+        for (label, dfs), color in zip(batch_data, scenario_colors):
+            combined_matrix = []
+            x_values = None
+
+            for df in dfs:
+                if x_col in df.columns and col_name in df.columns:
+                    df_sorted = df.sort_values(by=x_col)
+                    if x_values is None:
+                        x_values = df_sorted[x_col].values
+                    combined_matrix.append(df_sorted[col_name].values)
+
+            if not combined_matrix or x_values is None:
+                continue
+
+            data_matrix = np.array(combined_matrix)
+            n_samples = data_matrix.shape[0]
+            mean_line = np.mean(data_matrix, axis=0)
+
+            ax.plot(x_values, mean_line, label=f"{label} (N={n_samples})",
+                    color=color, linewidth=2, marker='o', markersize=4)
+
+            if n_samples > 1:
+                se = np.std(data_matrix, axis=0, ddof=1) / np.sqrt(n_samples)
+                ax.fill_between(x_values, mean_line - 1.96 * se,
+                                mean_line + 1.96 * se, color=color, alpha=0.15)
+            any_plotted = True
+
+        ax.legend(loc='upper left', frameon=True, facecolor='white',
+                  edgecolor='#e0e0e0', fontsize=8)
+
+    if not any_plotted:
+        plt.close()
+        return ''
+
+    for col in range(2):
+        axes[-1, col].set_xlabel('Year', fontsize=10)
+
+    fig.suptitle('Action Sub-Types Over Time (mean ± 95% CI)',
+                 fontsize=14, fontweight='bold', y=1.01)
+    plt.tight_layout()
+
+    output_path = os.path.join(plots_dir, 'batch_subaction_counts.png')
+    fig.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     return output_path
 
@@ -421,7 +488,7 @@ def plot_income_group_actions(output_root: str, configs: List[Dict],
 
 
 def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
-    from utils.config_loader import load_config_file
+    from model.config_loader import load_config_file
     print(f"Loading batch configurations from: {config_file_path}")
     configs = load_config_file(config_file_path)
     
@@ -465,6 +532,12 @@ def plot_batch_for_config(config_file_path: str, output_root: str) -> List[str]:
     if combined_plot_path:
         saved_plots.append(combined_plot_path)
         print(f"✓ Created combined actions plot: {combined_plot_path}")
+
+    # Sub-action breakdown (6-panel grid)
+    subaction_path = plot_subaction_counts(batch_data, 'year', plots_dir)
+    if subaction_path:
+        saved_plots.append(subaction_path)
+        print(f"✓ Created sub-action counts plot: {subaction_path}")
 
     # Energy by type (stacked area)
     energy_type_path = plot_energy_by_type(batch_data, 'year', plots_dir)

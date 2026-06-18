@@ -1,10 +1,10 @@
-"""Load and normalize BENCH model configuration files."""
+﻿"""Load and normalize BENCH model configuration files."""
 
 import json
 import os
 from typing import Any, Dict, List
 
-from utils.constants import (
+from model.parameters import (
     CASE_STUDIES,
     SCENARIOS,
     POLICIES,

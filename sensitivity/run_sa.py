@@ -1,4 +1,4 @@
-"""
+﻿"""
 Sobol sensitivity analysis for the BENCH model.
 
 Usage:
@@ -7,9 +7,9 @@ Usage:
 
 Outputs:
     sa_results/
-        sobol_S1.csv    — first-order indices
-        sobol_ST.csv    — total-order indices
-        sobol_S2.csv    — second-order indices
+        sobol_S1.csv    â€” first-order indices
+        sobol_ST.csv    â€” total-order indices
+        sobol_S2.csv    â€” second-order indices
         sobol_S1_plot.png
         sobol_ST_plot.png
 """
@@ -39,7 +39,7 @@ except ImportError:
     Parallel = None  # fallback to serial
 
 
-# ── Parameter space definition ────────────────────────────────────────────────
+# â”€â”€ Parameter space definition â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Each entry: (module_path, attribute_name, lower_bound, upper_bound)
 # Kept to parameters that are clearly calibration choices (not fixed constants).
 
@@ -64,7 +64,7 @@ SA_PROBLEM = {
         [0.90, 0.99],   # regret_per_nab_pbc
         [0.93, 0.99],   # regret_su_nor
         [5.50, 6.90],   # behavioral_cap
-        [300.0, 700.0], # pv_annual_cost (€/year)
+        [300.0, 700.0], # pv_annual_cost (â‚¬/year)
         [1200, 2200],   # pv_energy_output (kWh/year)
         [0.30, 0.70],   # conservation_rate
     ],
@@ -75,20 +75,19 @@ SA_PROBLEM = {
 @contextlib.contextmanager
 def _patch_params(param_dict: Dict[str, Any]):
     """
-    Context manager that temporarily overrides constants in utils.params and
-    utils.constants for a single model run, then restores original values.
+    Context manager that temporarily overrides constants in model.parameters
+    for a single model run, then restores original values.
     """
-    import utils.params as params_mod
-    import utils.constants as const_mod
+    import model.parameters as const_mod
 
     _mapping = {
-        "learn_awareness_fast": (params_mod, "LEARN_AWARENESS_RATE_FAST"),
-        "learn_awareness_slow": (params_mod, "LEARN_AWARENESS_RATE_SLOW"),
-        "learn_per_nab_pbc":    (params_mod, "LEARN_PER_NAB_PBC_RATE"),
-        "learn_su_nor":         (params_mod, "LEARN_SU_NOR_RATE"),
-        "regret_per_nab_pbc":   (params_mod, "REGRET_PER_NAB_PBC_RATE"),
-        "regret_su_nor":        (params_mod, "REGRET_SU_NOR_RATE"),
-        "behavioral_cap":       (params_mod, "BEHAVIORAL_CAP"),
+        "learn_awareness_fast": (const_mod, "LEARN_AWARENESS_RATE_FAST"),
+        "learn_awareness_slow": (const_mod, "LEARN_AWARENESS_RATE_SLOW"),
+        "learn_per_nab_pbc":    (const_mod, "LEARN_PER_NAB_PBC_RATE"),
+        "learn_su_nor":         (const_mod, "LEARN_SU_NOR_RATE"),
+        "regret_per_nab_pbc":   (const_mod, "REGRET_PER_NAB_PBC_RATE"),
+        "regret_su_nor":        (const_mod, "REGRET_SU_NOR_RATE"),
+        "behavioral_cap":       (const_mod, "BEHAVIORAL_CAP"),
         "pv_annual_cost":       (const_mod, "INVESTMENT_PV_ANNUAL_COST"),
         "pv_energy_output":     (const_mod, "INVESTMENT_PV_ENERGY_OUTPUT"),
         "conservation_rate":    (const_mod, "CONSERVATION_RATE"),
@@ -149,18 +148,18 @@ def run_sobol_analysis(base_path: str, n_samples: int = 64,
 
     Args:
         base_path:  project root (where data/ lives)
-        n_samples:  base sample size N — total runs = N*(D+2) where D=num_vars
+        n_samples:  base sample size N â€” total runs = N*(D+2) where D=num_vars
         seed:       RNG seed for sampling
         n_jobs:     parallel workers (-1 = all cores via joblib)
         output_dir: directory to write results
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Generating Sobol sample (N={n_samples}, D={SA_PROBLEM['num_vars']})…")
+    print(f"Generating Sobol sample (N={n_samples}, D={SA_PROBLEM['num_vars']})â€¦")
     sample = sobol_sampler.sample(SA_PROBLEM, n_samples, calc_second_order=True,
                                   seed=seed)
     n_runs = sample.shape[0]
-    print(f"Running {n_runs} model evaluations…")
+    print(f"Running {n_runs} model evaluationsâ€¦")
 
     def _task(i):
         return _run_single(sample[i], SA_PROBLEM["names"], base_path, seed=i)
@@ -202,7 +201,7 @@ def _plot_indices(s1_rows, st_rows, param_names, output_dir):
     try:
         import matplotlib.pyplot as plt
     except ImportError:
-        print("matplotlib not available — skipping SA plots")
+        print("matplotlib not available â€” skipping SA plots")
         return
 
     s1_df = pd.DataFrame(s1_rows).set_index("output")[param_names]
